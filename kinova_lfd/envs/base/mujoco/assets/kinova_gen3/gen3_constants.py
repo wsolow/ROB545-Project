@@ -60,6 +60,12 @@ def get_gen3_spec() -> mujoco.MjSpec:
     """
     spec = mujoco.MjSpec.from_file(str(KINOVA_GEN3_GRIPPER_XML))
     spec.assets = get_gen3_assets(spec.meshdir)
+    # Position actuators clip at forcerange. The XML kv (250 / 120) spends that
+    # budget on damping, so a 0.15 m/s tool command saturates and the arm sags.
+    for act in spec.actuators:
+        if act.name.startswith("joint_"):
+            kv = 40.0 if abs(act.forcerange[1]) >= 30.0 else 20.0
+            act.biasprm[2] = -kv
     # Attach keeps the parent scene's <option> and warns on conflicts. The XML
     # requests implicitfast; MujocoCfg applies that integrator after compile.
     spec.option.integrator = mujoco.mjtIntegrator.mjINT_EULER

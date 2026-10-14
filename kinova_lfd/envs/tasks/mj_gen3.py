@@ -166,9 +166,19 @@ class MjGen3Env(MjDirectRlEnv):
             )
             targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
             self.actions = targets.clone()
-        elif action_spec == ActionSpec.TWIST_TCP:  # TODO resolve twists to motion
-            self.actions = torch.zeros(size=(self.num_envs, len(self.cfg.joint_ids)), device=self.device)
-            self.actions[:, -1] = actions[:, -1]
+        elif action_spec == ActionSpec.TWIST_TCP:
+            twist = actions[:, :6]
+            if torch.any(twist.abs() > 1e-6):
+                # dq tracks an integrated tool pose, so the setpoint has to start
+                # from the measured joints. Re-seeding while the twist is zero
+                # would copy gravity sag into the hold command.
+                arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_pos(
+                    twist, smoothing=False
+                )
+            else:
+                arm_targets = self.robot_dof_targets[:, :-1]
+            targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
+            self.actions = targets.clone()
 
         elif action_spec in [ActionSpec.JOINTS_POS, ActionSpec.JOINTS_VEL]:
             self.actions = actions.clone()
@@ -220,6 +230,8 @@ class MjGen3Env(MjDirectRlEnv):
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
+        if hasattr(self, "_diff_ik"):
+            self._diff_ik.reset()
         # robot state
         joint_pos = (self.robot.data.default_joint_pos[env_ids])[:, self.cfg.joint_ids]
         joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
