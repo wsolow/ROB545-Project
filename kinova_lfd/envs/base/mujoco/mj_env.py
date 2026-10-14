@@ -4,6 +4,7 @@ from dataclasses import MISSING, field
 from typing import Any
 
 import gymnasium as gym
+import mujoco as mj
 import mujoco_warp as mjw
 import numpy as np
 import torch
@@ -19,14 +20,12 @@ from mjlab.viewer.debug_visualizer import DebugVisualizer
 from mjlab.viewer.offscreen_renderer import OffscreenRenderer
 from mjlab.viewer.viewer_config import ViewerConfig
 from prettytable import PrettyTable
-from skillet.core.math import quat_apply, quat_apply_inverse, quat_inv, quat_mul
-from skillet.core.spaces import ActionSpec
-from skillet.envs.compatibility import SkilletGymEnv
-from skillet.envs.mujoco.mj_viewer import NativeMujocoViewer
-from skillet.envs.util import configclass
-from skillet.rl.s2r import ObservationManager
 
-from kinova_lfd.envs.base import mujoco
+from kinova_lfd.core.specs import ActionSpec
+from kinova_lfd.core.tensor_math import quat_apply, quat_apply_inverse, quat_inv, quat_mul
+from kinova_lfd.envs.base.gym import GymEnv
+from kinova_lfd.envs.base.mujoco.configclass import configclass
+from kinova_lfd.envs.base.mujoco.viewer import MjViewer
 
 
 @configclass
@@ -43,8 +42,6 @@ class MjDirectRlEnvCfg:
 
     # Base environment configuration.
 
-    obs_terms: list[str] = MISSING
-
     decimation: int = MISSING
     """Number of physics simulation steps per environment step. Higher values mean
   coarser control frequency. Environment step duration = physics_dt * decimation."""
@@ -52,18 +49,6 @@ class MjDirectRlEnvCfg:
     scene: SceneCfg = MISSING
     """Scene configuration defining terrain, entities, and sensors. The scene
   specifies ``num_envs``, the number of parallel environments."""
-
-    seed: int | None = None
-    """Random seed for reproducibility. If None, a random seed is used. The actual
-  seed used is stored back into this field after initialization."""
-
-    sim: SimulationCfg = field(default_factory=SimulationCfg)
-    """Simulation configuration including physics timestep, solver iterations,
-  contact parameters, and NaN guarding."""
-
-    viewer: ViewerConfig = field(default_factory=ViewerConfig)
-    """Viewer configuration for rendering (camera position, resolution, etc.)."""
-
     # RL-specific configuration.
 
     episode_length_s: float = MISSING
@@ -82,28 +67,39 @@ class MjDirectRlEnvCfg:
     limit.
   """
 
+    scale_rewards_by_dt: bool = MISSING
+    """Whether to multiply rewards by the environment step duration (dt).
+
+    When True (default), reward values are scaled by step_dt to normalize cumulative
+    episodic rewards across different simulation frequencies. Set to False for
+    algorithms that expect unscaled reward signals (e.g., HER, static reward scaling).
+    """
+
+    sim: SimulationCfg = field(default_factory=SimulationCfg)
+    """Simulation configuration including physics timestep, solver iterations,
+  contact parameters, and NaN guarding."""
+
+    viewer: ViewerConfig = field(default_factory=ViewerConfig)
+    """Viewer configuration for rendering (camera position, resolution, etc.)."""
+
+    seed: int | None = None
+    """Random seed for reproducibility. If None, a random seed is used. The actual
+  seed used is stored back into this field after initialization."""
+
     events: object | None = None
     """Event settings. Defaults to None, in which case no events are applied through the event manager.
 
     Please refer to the :class:`isaaclab.managers.EventManager` class for more details.
     """
 
-    scale_rewards_by_dt: bool = MISSING
-    """Whether to multiply rewards by the environment step duration (dt).
 
-  When True (default), reward values are scaled by step_dt to normalize cumulative
-  episodic rewards across different simulation frequencies. Set to False for
-  algorithms that expect unscaled reward signals (e.g., HER, static reward scaling).
-  """
-
-
-class MjDirectRlEnv(SkilletGymEnv):
+class MjDirectRlEnv(GymEnv):
     """Manager-based RL environment."""
 
     is_vector_env = True
     metadata = {
         "render_modes": [None, "rgb_array", "human"],
-        "mujoco_version": mujoco.__version__,
+        "mujoco_version": mj.__version__,
         "warp_version": wp.config.version,
     }
     cfg: MjDirectRlEnvCfg
@@ -158,14 +154,12 @@ class MjDirectRlEnv(SkilletGymEnv):
             renderer.initialize()
             self._offline_renderer = renderer
         if self.render_mode == "human":
-            self._mj_renderer = NativeMujocoViewer(self)
+            self._mj_renderer = MjViewer(self)
             self._mj_renderer.initialize()
         self.metadata["render_fps"] = 1.0 / self.step_dt
 
         # Configure spaces for the environment.
         self._configure_gym_env_spaces()
-
-        self.obs_manager = ObservationManager(self.cfg.obs_terms, self)
 
         if self.cfg.events:
             self.event_manager = EventManager(self.cfg.events, self)
@@ -234,6 +228,9 @@ class MjDirectRlEnv(SkilletGymEnv):
         self.sim.sense()
         self.obs_buf = self._get_observations()
         return self.obs_buf, self.extras
+
+    def get_observations(self) -> torch.Tensor:
+        return self._get_observations()
 
     def step(self, action: torch.Tensor, action_spec: ActionSpec = None) -> types.VecEnvStepReturn:
         """Run one environment step: apply actions, simulate, compute RL signals.

@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from kinova_lfd.core.math import base_to_tcp_twist, euler_xyz_to_rotvec
+from kinova_lfd.core.np_math import base_to_tcp_twist, euler_xyz_to_rotvec
 
 from ..device_base import DeviceBase, DeviceCfg
 from .joystick_listener import VRJoystickListener

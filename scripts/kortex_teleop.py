@@ -8,7 +8,7 @@ Written by Will Solow, 2026.
 import argparse
 
 from kinova_lfd.agents import DataLogger, LfDModerator
-from kinova_lfd.envs.factory import create_kortex_env
+from kinova_lfd.envs.factory import create_env
 from kinova_lfd.teleop.devices import (
     Se3Keyboard,
     Se3KeyboardCfg,
@@ -44,7 +44,7 @@ def main() -> None:
     """
     env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "use_udp": False, "dt": 1 / 20}
 
-    env = create_kortex_env(args_cli.task, env_cfg)
+    env = create_env(args_cli.task, env_cfg)
 
     if args_cli.teleop_device.lower() == "keyboard":
         teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=10))

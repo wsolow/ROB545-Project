@@ -46,6 +46,7 @@ class Se3Keyboard(DeviceBase):
         )
 
     def start(self):
+        print(self)
         self._listener.start()
 
     def stop(self):
@@ -56,7 +57,7 @@ class Se3Keyboard(DeviceBase):
     def __str__(self) -> str:
         msg = f"Keyboard Controller for SE(3): {self.__class__.__name__}\n"
         msg += "\t----------------------------------------------\n"
-        msg += "\tToggle gripper (open/close): R\n"
+        msg += "\tToggle gripper (open/close): K\n"
         msg += "\tMove arm along x-axis: W/S\n"
         msg += "\tMove arm along y-axis: A/D\n"
         msg += "\tMove arm along z-axis: Q/E\n"
@@ -85,7 +86,7 @@ class Se3Keyboard(DeviceBase):
             self.reset()
             return
 
-        if char == "R":
+        if char == "K":
             self._close_gripper = not self._close_gripper
             self._gripper_value = 1.0 if self._close_gripper else 0.0
             return

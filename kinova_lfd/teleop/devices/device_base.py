@@ -4,8 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
+import torch
 
-from kinova_lfd.core.math import base_to_tcp_twist, euler_xyz_to_rotvec
+from kinova_lfd.core.np_math import base_to_tcp_twist, euler_xyz_to_rotvec
+from kinova_lfd.core.tensor_math import base_to_tcp_twist as torch_base_to_tcp_twist
+from kinova_lfd.core.tensor_math import euler_xyz_to_rotvec as torch_euler_xyz_to_rotvec
 
 
 @dataclass
@@ -54,6 +57,7 @@ class DeviceBase(ABC):
         self._new_exp_flag = False
         self._admittance_flag = False
         self._close_gripper = False
+        self._gripper_value = 0.0
 
     @property
     def home(self):
@@ -100,7 +104,7 @@ class DeviceBase(ABC):
         """Start a thread."""
         raise NotImplementedError
 
-    def advance(self, tcp_pose_b: np.ndarray) -> np.ndarray:
+    def advance(self, tcp_pose_b: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
         """Return the current command as a tensor.
 
         Args:
@@ -110,13 +114,31 @@ class DeviceBase(ABC):
             np.ndarray: [x, y, z, rx, ry, rz] or [x, y, z, rx, ry, rz, gripper]
 
         """
-        rot_vec = euler_xyz_to_rotvec(self._delta_rot)
-        if self.frame == "tcp":
-            command = np.concatenate((self._delta_pos, rot_vec), axis=0)
-        elif self.frame == "base":
-            tcp_lin_vel, tcp_ang_vel = base_to_tcp_twist(self._delta_pos, self._delta_rot, tcp_pose_b[3:7])
-            command = np.concatenate((tcp_lin_vel, tcp_ang_vel), axis=0)
+        if isinstance(tcp_pose_b, torch.Tensor):
+            delta_pos = torch.as_tensor(self._delta_pos, device=tcp_pose_b.device, dtype=torch.float32).unsqueeze(0)
+            delta_rot = torch.as_tensor(self._delta_rot, device=tcp_pose_b.device, dtype=torch.float32).unsqueeze(0)
+            if self.frame == "tcp":
+                rot_vec = torch_euler_xyz_to_rotvec(delta_rot)
+                command = torch.cat((delta_pos, rot_vec), dim=1)
+            elif self.frame == "base":
+                tcp_lin_vel, tcp_ang_vel = torch_base_to_tcp_twist(delta_pos, delta_rot, tcp_pose_b[:, 3:7])
+                command = torch.cat((tcp_lin_vel, tcp_ang_vel), dim=1)
 
-        if self.gripper_term:
-            command = np.concatenate((command, np.asarray([self._gripper_value])), axis=0)
+            if self.gripper_term:
+                command = torch.cat(
+                    (command, torch.as_tensor([self._gripper_value], device=tcp_pose_b.device).unsqueeze(0)), dim=1
+                )
+        else:
+            if self.frame == "tcp":
+                rot_vec = euler_xyz_to_rotvec(self._delta_rot)
+                command = np.concatenate((self._delta_pos, rot_vec), axis=0)
+            elif self.frame == "base":
+                tcp_lin_vel, tcp_ang_vel = base_to_tcp_twist(self._delta_pos, self._delta_rot, tcp_pose_b[3:7])
+                command = np.concatenate((tcp_lin_vel, tcp_ang_vel), axis=0)
+
+            if self.gripper_term:
+                command = np.concatenate((command, np.asarray([self._gripper_value])), axis=0)
         return command
+
+    def __call__(self, observation: np.ndarray | torch.Tensor) -> np.ndarray | torch.Tensor:
+        return self.advance(observation)

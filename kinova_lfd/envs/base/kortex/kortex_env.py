@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from kortex_api.autogen.messages import Base_pb2, BaseCyclic_pb2
 
-from kinova_lfd.core.math import np_quat_from_euler_xyz
+from kinova_lfd.core.np_math import np_quat_from_euler_xyz
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.kortex.kortex_bridge import DeviceConnection

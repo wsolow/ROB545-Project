@@ -1,12 +1,12 @@
 import torch
 from mjlab.envs.mdp.actions import DifferentialIKActionCfg
 
-from skillet.core.math import quat_from_euler_xyz
-from skillet.envs.mujoco import MjDirectRlEnv
+from kinova_lfd.core.tensor_math import quat_from_euler_xyz
+from kinova_lfd.envs.base.gym import GymEnv
 
 
 class MjDifferentialIk:
-    def __init__(self, env: MjDirectRlEnv):
+    def __init__(self, env: GymEnv):
         self._env = env
         self._ik_action_cfg = DifferentialIKActionCfg(
             entity_name="robot",

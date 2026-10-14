@@ -1,14 +1,15 @@
-"""ros2_teleop_vr.py.
+"""mj_teleop.py.
 
-Script to run a keyboard or joystick teleoperation with ROS2 manipulation environments.
+Script to run a keyboard or joystick teleoperation with Mujoco manipulation environments.
 
 Written by Will Solow, 2026.
 """
 
 import argparse
 
-from kinova_lfd.agents import DataLogger
-from kinova_lfd.envs.factory import create_kortex_env
+# from kinova_lfd.envs.base.mujoco.viewer import NativeMujocoViewer
+from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+from kinova_lfd.envs.factory import create_env
 from kinova_lfd.teleop.devices import (
     Se3Keyboard,
     Se3KeyboardCfg,
@@ -26,7 +27,7 @@ parser.add_argument("--task", type=str, default="Mj-Gen3-v0", help="Environment.
 parser.add_argument(
     "--teleop_device",
     type=str,
-    default="xbox",
+    default="keyboard",
     choices={"keyboard", "vr_joystick", "vr_headset", "xbox"},
     help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
 )
@@ -41,9 +42,9 @@ def main() -> None:
 
     Defaults to Kortex-Gen3-v0 environment and passes the twist_tcp Action Specification.
     """
-    env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "use_udp": False, "dt": 1 / 20}
+    env_cfg = {}
 
-    env = create_kortex_env(args_cli.task, env_cfg)
+    env = create_env(args_cli.task, env_cfg)
 
     if args_cli.teleop_device.lower() == "keyboard":
         teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=10))
@@ -55,12 +56,10 @@ def main() -> None:
         teleop_interface = XboxController(XboxControllerCfg(pos_sensitivity=0.12, rot_sensitivity=25))
     else:
         raise ValueError(f"Unsupported teleop device: {args_cli.teleop_device}")
-    logger = DataLogger(log_dir=args_cli.log_dir)
 
     env.reset()
-    teleop_interface.reset()
 
-    NativeMujocoViewer(env, policy).run()
+    MjViewer(env, teleop_interface).run()
 
 
 if __name__ == "__main__":

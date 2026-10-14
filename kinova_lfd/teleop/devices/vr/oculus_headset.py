@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, override
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from typing_extensions import override
 
-from kinova_lfd.core.math import (
+from kinova_lfd.core.np_math import (
     base_to_tcp_twist,
     euler_xyz_from_quat,
     euler_xyz_to_rotvec,

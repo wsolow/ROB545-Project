@@ -29,6 +29,7 @@ dependencies = [
     "gymnasium>=1.1",
     "pynput",
     "opencv-python",
+    "zmq"
 
 ]
 

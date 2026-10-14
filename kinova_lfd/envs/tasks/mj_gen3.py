@@ -11,25 +11,30 @@ from mjlab.sensor import CameraSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.sim.sim import Simulation
 from mjlab.terrains import TerrainEntityCfg
-from skillet.controllers.waypoints import WaypointCfg
-from skillet.core.spaces import ActionSpec
-from skillet.envs.mujoco import MjDirectRlEnv
-from skillet.envs.mujoco.controllers import MjDifferentialIk
-from skillet.envs.util import configclass
-from skillet_tasks.assets.mujoco.kinova_gen3 import get_gen3_robot_cfg
-from skillet_tasks.mj_tasks.direct.cfg import Gen3BaseCfg
+
+from kinova_lfd.core.specs import ActionSpec
+from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
+from kinova_lfd.envs.base.mujoco.configclass import configclass
+from kinova_lfd.envs.base.mujoco.controllers.differential_ik import MjDifferentialIk
+from kinova_lfd.envs.base.mujoco.controllers.waypoints import WaypointCfg
+from kinova_lfd.envs.base.mujoco.mj_env import MjDirectRlEnv, MjDirectRlEnvCfg
 
 
 @configclass
-class MjGen3EnvCfg(Gen3BaseCfg):
+class MjGen3EnvCfg(MjDirectRlEnvCfg):
+    decimation = 2
+
     episode_length_s = 100.0
     action_space = 8
-    observation_space = 16
-    skills = []
-    obs_terms = ["joint_pos", "joint_vel"]
+    observation_space = 8
     tool_site_name = "pinch_site"
+    ee_link_name = "end_effector_link"
+    base_link_name = "base_link"
+    gripper_joint_names = ["right_driver_joint"]
+    joint_ids = [0, 1, 2, 3, 4, 5, 6, 0]
+    tcp_offset = [0.0, 0.0, 0.120, 1.0, 0.0, 0.0, 0.0]
 
-    sim = SimulationCfg(mujoco=MujocoCfg(gravity=(0, 0, -9.81)))
+    sim = SimulationCfg(mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
 
     scene = SceneCfg(
         num_envs=1,
@@ -153,7 +158,7 @@ class MjGen3Env(MjDirectRlEnv):
         self._tabletop_camera = self.scene.sensors["tabletop_camera"]
 
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
-        if action_spec.name == "tcp_cart":
+        if action_spec == ActionSpec.MOVE_TCP:
             # Obtain waypoints that should be followed by the arm
             next_action = self._waypoints.get_next_point(self._robot_tool_pose_b, actions[:, :6])
             arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_vel(
@@ -161,9 +166,16 @@ class MjGen3Env(MjDirectRlEnv):
             )
             targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
             self.actions = targets.clone()
-            self.robot_dof_targets_prev = self.robot_dof_targets
+        elif action_spec == ActionSpec.TWIST_TCP:  # TODO resolve twists to motion
+            self.actions = torch.zeros(size=(self.num_envs, len(self.cfg.joint_ids)), device=self.device)
+            self.actions[:, -1] = actions[:, -1]
 
-        self.robot_dof_targets = targets
+        elif action_spec in [ActionSpec.JOINTS_POS, ActionSpec.JOINTS_VEL]:
+            self.actions = actions.clone()
+        else:
+            raise NotImplementedError
+        self.robot_dof_targets_prev = self.robot_dof_targets
+        self.robot_dof_targets = self.actions.clone()
 
     def _apply_action(self):
         gripper_moving = self._start_gripper(self.robot_dof_targets, close_time=0.75)
@@ -198,7 +210,7 @@ class MjGen3Env(MjDirectRlEnv):
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
         """Return the observations as a vector."""
-        return {"policy": self.obs_manager.obs_vec().clamp(-5.0, 5.0)}
+        return {"policy": self._joint_positions}
 
     def _get_rewards(self) -> torch.Tensor:
         # Refresh the intermediate values after the physics steps
@@ -316,12 +328,12 @@ class MjGen3Env(MjDirectRlEnv):
     @property
     def _robot_tool_pose_b(self) -> torch.Tensor:
         """Return the tool site of the robot."""
-        return self.robot.data.site_pose_w[self.tool_site_idx]
+        return self.robot.data.site_pose_w[:, self.tool_site_idx]
 
     @property
     def _robot_tool_vel_b(self) -> torch.Tensor:
         """Return the tool site of the robot."""
-        return self.robot.data.site_vel_w[self.tool_site_idx]
+        return self.robot.data.site_vel_w[:, self.tool_site_idx]
 
     @property
     def _robot_tool_wrench_b(self) -> torch.Tensor:
