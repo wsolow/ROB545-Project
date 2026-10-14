@@ -1,0 +1,344 @@
+from __future__ import annotations
+
+import time
+
+import mujoco
+import numpy as np
+import torch
+from mjlab.entity import EntityCfg
+from mjlab.scene import Scene, SceneCfg
+from mjlab.sensor import CameraSensorCfg
+from mjlab.sim import MujocoCfg, SimulationCfg
+from mjlab.sim.sim import Simulation
+from mjlab.terrains import TerrainEntityCfg
+from skillet.controllers.waypoints import WaypointCfg
+from skillet.core.spaces import ActionSpec
+from skillet.envs.mujoco import MjDirectRlEnv
+from skillet.envs.mujoco.controllers import MjDifferentialIk
+from skillet.envs.util import configclass
+from skillet_tasks.assets.mujoco.kinova_gen3 import get_gen3_robot_cfg
+from skillet_tasks.mj_tasks.direct.cfg import Gen3BaseCfg
+
+
+@configclass
+class MjGen3EnvCfg(Gen3BaseCfg):
+    episode_length_s = 100.0
+    action_space = 8
+    observation_space = 16
+    skills = []
+    obs_terms = ["joint_pos", "joint_vel"]
+    tool_site_name = "pinch_site"
+
+    sim = SimulationCfg(mujoco=MujocoCfg(gravity=(0, 0, -9.81)))
+
+    scene = SceneCfg(
+        num_envs=1,
+        env_spacing=2,
+        terrain=TerrainEntityCfg(
+            terrain_type="plane",
+            textures=(),
+            materials=(),
+            # lights=(LightCfg(name="sun", pos=(0.5, -0.5, 1.5), type="directional", castshadow=False),),
+        ),
+        sensors=(
+            CameraSensorCfg(
+                name="tabletop_camera",
+                width=640,
+                height=480,
+                pos=[0.4, -0.5, 0.3],
+                quat=[0.8192, 0.5736, 0.0, 0.0],
+                fovy=90,
+                data_types=("rgb", "depth"),
+                use_shadows=True,
+                use_textures=True,
+                clone_data=True,
+            ),
+        ),
+    )
+
+
+class MjGen3Env(MjDirectRlEnv):
+    # pre-physics step calls
+    #   |-- _pre_physics_step(action)
+    #   |-- _apply_action()
+    # post-physics step calls
+    #   |-- _get_dones()
+    #   |-- _get_rewards()
+    #   |-- _reset_idx(env_ids)
+    #   |-- _get_observations()
+
+    def __init__(self, cfg: MjGen3EnvCfg, render_mode: str | None = None, **kwargs):
+        super().__init__(cfg, render_mode, **kwargs)
+
+        self.dt = self.cfg.sim.mujoco.timestep * self.cfg.decimation
+
+        # Goal poses and end effector positions
+        self.actions = torch.zeros((self.num_envs, self.cfg.action_space), device=self.device)
+        self._current_prev_actions = torch.zeros_like(self.actions, device=self.device)
+
+        # Limits and targets
+        self.robot_dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0].to(device=self.device)[
+            self.cfg.joint_ids
+        ]
+        self.robot_dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1].to(device=self.device)[
+            self.cfg.joint_ids
+        ]
+        self.robot_dof_lower_limits[self.robot_dof_lower_limits == -float("inf")] = -torch.pi
+        self.robot_dof_upper_limits[self.robot_dof_upper_limits == float("inf")] = torch.pi
+
+        self.robot_dof_targets = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
+        self.robot_dof_targets_prev = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
+        self._curr_gripper_goal = None
+
+        self.ee_link_idx = self.robot.find_bodies(self.cfg.ee_link_name)[0][0]
+        self.tool_site_idx = self.robot.find_sites(self.cfg.tool_site_name)[0][0]
+
+        self.tcp_offset = torch.as_tensor(self.cfg.tcp_offset, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+
+        self._diff_ik = MjDifferentialIk(self)
+        self._waypoints = WaypointCfg().build()
+
+    def _setup_scene(self):
+
+        def get_cube_spec(
+            name: str = "red_block",
+            rgba: tuple[int] = (0.8, 0.1, 0.1, 1.0),
+            cube_size: float = 0.02,
+            mass: float = 0.06,
+        ) -> mujoco.MjSpec:
+            """Create a cube object specification."""
+            spec = mujoco.MjSpec()
+            body = spec.worldbody.add_body(name=name)
+            body.add_freejoint(name=f"{name}_joint")
+            geom = body.add_geom(
+                name=name, type=mujoco.mjtGeom.mjGEOM_BOX, size=(cube_size,) * 3, mass=mass, rgba=rgba, group=2
+            )
+            geom.solref = (0.005, 1.0)
+            geom.solimp = (0.99, 0.9999, 0.001, 0.5, 2)
+            return spec
+
+        self.cfg.scene.entities = {
+            "robot": get_gen3_robot_cfg(),
+            "red_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="red_block", rgba=(0.8, 0.1, 0.1, 1.0))),
+            "blue_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="blue_block", rgba=(0.1, 0.1, 0.8, 1.0))),
+            "pink_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="pink_block", rgba=(1.0, 0.4, 0.7, 1.0))),
+            "green_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="green_block", rgba=(0.1, 0.8, 0.1, 1.0))),
+            "yellow_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="yellow_block", rgba=(0.9, 0.9, 0.1, 1.0))),
+        }
+
+        # Initialize scene and simulation.
+        self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device)
+        self.sim = Simulation(
+            num_envs=self.scene.num_envs,
+            cfg=self.cfg.sim,
+            model=self.scene.compile(),
+            device=self.cfg.sim.device,
+        )
+
+        self.scene.initialize(
+            mj_model=self.sim.mj_model,
+            model=self.sim.model,
+            data=self.sim.data,
+        )
+
+        # Get the robot from the scene
+        self._cubes = {
+            "red_block": self.scene.entities["red_block"],
+            "blue_block": self.scene.entities["blue_block"],
+            "pink_block": self.scene.entities["pink_block"],
+            "green_block": self.scene.entities["green_block"],
+            "yellow_block": self.scene.entities["yellow_block"],
+        }
+        self._robot = self.scene.entities["robot"]
+        self._tabletop_camera = self.scene.sensors["tabletop_camera"]
+
+    def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
+        if action_spec.name == "tcp_cart":
+            # Obtain waypoints that should be followed by the arm
+            next_action = self._waypoints.get_next_point(self._robot_tool_pose_b, actions[:, :6])
+            arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_vel(
+                next_action, smoothing=False
+            )
+            targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
+            self.actions = targets.clone()
+            self.robot_dof_targets_prev = self.robot_dof_targets
+
+        self.robot_dof_targets = targets
+
+    def _apply_action(self):
+        gripper_moving = self._start_gripper(self.robot_dof_targets, close_time=0.75)
+        self.robot.set_tendon_len_target(
+            torch.where(self.robot_dof_targets[:, -1:] > 0, 255, self.robot_dof_targets[:, -1:]),
+            tendon_ids=self.cfg.joint_ids[-1:],
+        )
+        if not gripper_moving:
+            self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self.cfg.joint_ids[:-1])
+
+    def _start_gripper(self, joint_pos: torch.Tensor, close_time: float = 0.5) -> bool:
+        """Start the gripper timer for if it should close or not.
+
+        NOTE: this does not current have batch support.
+        """
+        gripper_val = joint_pos[:, -1]
+        if gripper_val != self._curr_gripper_goal:
+            self._curr_gripper_goal = gripper_val
+            self._new_gripper_goal = True
+            self._gripper_goal_start = time.perf_counter()
+        elif (time.perf_counter() - self._gripper_goal_start) < close_time:
+            self._new_gripper_goal = True
+        else:
+            self._new_gripper_goal = False
+
+        return self._new_gripper_goal
+
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Terminate if max length is reached."""
+        truncated = self.episode_length_buf >= self.max_episode_length - 1
+        return torch.zeros((self.num_envs), dtype=torch.bool), truncated
+
+    def _get_observations(self) -> dict[str, torch.Tensor]:
+        """Return the observations as a vector."""
+        return {"policy": self.obs_manager.obs_vec().clamp(-5.0, 5.0)}
+
+    def _get_rewards(self) -> torch.Tensor:
+        # Refresh the intermediate values after the physics steps
+        self._compute_intermediate_values()
+
+        return torch.zeros(self.num_envs, device=self.device)
+
+    def _reset_idx(self, env_ids: torch.Tensor | None):
+        super()._reset_idx(env_ids)
+        # robot state
+        joint_pos = (self.robot.data.default_joint_pos[env_ids])[:, self.cfg.joint_ids]
+        joint_pos = torch.clamp(joint_pos, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
+        joint_vel = torch.zeros_like(joint_pos)
+        self.robot.set_joint_position_target(joint_pos, env_ids=env_ids.unsqueeze(-1), joint_ids=self.cfg.joint_ids)
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids, joint_ids=self.cfg.joint_ids)
+
+        # Cubes
+        self._init_cube_poses = {
+            "red_block": [0.25, 0, 0.021],
+            "blue_block": [0.30, 0, 0.021],
+            "pink_block": [0.35, 0, 0.021],
+            "green_block": [0.40, 0, 0.021],
+            "yellow_block": [0.45, 0, 0.021],
+        }
+        for cube in self._cubes:
+            self._cubes[cube].write_root_link_pose_to_sim(
+                torch.tensor([[*self._init_cube_poses[cube], 1, 0, 0, 0]], device=self.device).repeat(self.num_envs, 1),
+                env_ids,
+            )
+            self._cubes[cube].write_root_link_velocity_to_sim(
+                torch.zeros((len(env_ids), 6), device=self.device), env_ids
+            )
+
+        # Need to refresh the intermediate values so that _get_observations() can use the latest values
+        self._compute_intermediate_values(env_ids)
+
+    def _compute_intermediate_values(self, env_ids: torch.Tensor | None = None):
+        """Docstring for _compute_intermediate_values.
+
+        :param self: Description
+        :param env_ids: Description
+        :type env_ids: torch.Tensor | None
+
+        Compute vlaues in the world frame
+        """
+
+    def _get_latest_rgbd(self):
+        """Grab the latest RGBD image from the Mujoco simulator.
+
+        Returns:
+        A dictionary containing:
+          - ``rgb``: (H, W, 3) uint8 RGB image
+          - ``depth``: (H, W) uint16 depth image
+          - ``intrinsic_k``: (3, 3) float64 camera intrinsic matrix
+          - ``camera_pose``: 7D float64 array (x, y, z, qw, qx, qy, qz) in Isaac wxyz
+          - ``timestamp``: float timestamp in seconds
+
+        """
+        from PIL import Image
+
+        height = self._tabletop_camera.cfg.height
+        width = self._tabletop_camera.cfg.width
+        fovy_deg = self._tabletop_camera.cfg.fovy
+
+        fy = (height / 2.0) / np.tan(np.radians(fovy_deg / 2.0))
+        fx = fy  # square pixels
+        cx = width / 2.0
+        cy = height / 2.0
+        intrinsic_k = torch.as_tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], device=self.device)
+
+        latest = {}
+        camera_data = self._tabletop_camera.data
+        latest["rgb"] = camera_data.rgb.permute(0, 3, 1, 2)
+        # latest["depth"] = (camera_data.depth.permute(0, 3, 1, 2) * 1000).to(torch.uint16)[:, 0] # TODO changing this here has downstream effects?
+        latest["depth"] = camera_data.depth.permute(0, 3, 1, 2)[:, 0]
+        latest["timestamp"] = time.perf_counter()
+        latest["camera_pose"] = torch.as_tensor(
+            self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device
+        )
+        latest["intrinsic_k"] = intrinsic_k
+
+        def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
+            """Colorize a depth image and return a PIL Image.
+
+            Args:
+                depth:     HxW float array (meters or raw units)
+                min_depth: clip minimum (defaults to array min) in meters
+                max_depth: clip maximum (defaults to array max) in meters
+                colormap:  any matplotlib colormap name
+
+            """
+            import matplotlib.pyplot as plt
+
+            if depth.dtype == np.uint16:
+                depth = depth.astype(np.float32) / 1000
+
+            min_d = min_depth if min_depth is not None else np.nanmin(depth)
+            max_d = max_depth if max_depth is not None else np.nanmax(depth)
+
+            # Normalize to [0, 1]
+            normalized = (depth - min_d) / (max_d - min_d + 1e-8)
+            normalized = np.clip(normalized, 0, 1)
+
+            # Apply colormap → RGBA float array → uint8
+            cmap = plt.get_cmap(colormap)
+            colored = (cmap(normalized) * 255).astype(np.uint8)
+
+            return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
+
+        Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
+        colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
+
+        return latest
+
+    @property
+    def _robot_tool_pose_b(self) -> torch.Tensor:
+        """Return the tool site of the robot."""
+        return self.robot.data.site_pose_w[self.tool_site_idx]
+
+    @property
+    def _robot_tool_vel_b(self) -> torch.Tensor:
+        """Return the tool site of the robot."""
+        return self.robot.data.site_vel_w[self.tool_site_idx]
+
+    @property
+    def _robot_tool_wrench_b(self) -> torch.Tensor:
+        """Return the tool wrench forces appleid to the robot."""
+        return self.robot.data.body_external_wrench[:, self.ee_link_idx]
+
+    @property
+    def _n_objects(self) -> int:
+        """Return the number of objects in the scene."""
+        return len(self._cubes)
+
+    @property
+    def _object_names(self) -> list[str]:
+        return list(self._cubes.keys())
+
+    @property
+    def _object_poses(self) -> torch.Tensor:
+        return torch.stack([c.data.root_link_pose_w for c in self._cubes.values()]).reshape(
+            self.sim.num_envs, self._n_objects, -1
+        )

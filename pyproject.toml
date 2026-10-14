@@ -1,0 +1,179 @@
+[project]
+name = "kinova_lfd"
+version = "0.0.2"
+description = "A framework for learning from demonstrations using the Kinova arm"
+requires-python = ">= 3.12"
+authors = [
+    {name = "Will Solow", email = "soloww@oregonstate.edu"},
+]
+license = "MIT"
+license-files = ["LICENSE.txt"]
+homepage = "https://github.com/Intelligent-Reliable-Autonomous-Systems/Robot-Skills"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = [
+    "torch",
+    "numpy",
+    "gymnasium>=1.1",
+    "pynput",
+    "opencv-python",
+
+]
+
+[project.optional-dependencies]
+kortex = [
+    "pyrealsense2",
+    "protobuf==7.34.1",
+]
+
+mujoco = [
+    "mjlab",
+    "hydra-core"
+]
+
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+]
+
+[project.scripts]
+
+
+#[project.entry-points."gymnasium.envs"]
+
+[build-system]
+requires = ["hatchling", "swig"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kinova_lfd"]
+
+[tool.ruff.lint]
+# Enable pycodestyle (`E`), Pyflakes (`F`), and isort (`I`) codes
+select = [
+    "ANN",       # flake8-annotations: Enforces function type hints
+    "D",         # pydocstyle: Enforces docstring format (helps with type hints)
+    "E", "W",    # pycodestyle: Standard PEP 8 errors & warnings
+    "F",         # Pyflakes: Detects undefined variables, unused imports, etc.
+    "FA",        # flake8-future-annotations: Encourages `from __future__ import annotations`
+    "B",         # flake8-bugbear: Finds likely bugs & design issues
+    "SIM",       # flake8-simplify: Simplifies redundant expressions
+    "TC",        # flake8-type-checking: Encourages proper `TYPE_CHECKING` usage
+    "PERF",      # Perflint: Performance optimizations
+    "UP",        # pyupgrade: Keeps syntax modern
+    "RUF",       # Ruff-specific improvements
+    "C4",        # flake8-comprehensions: Optimize list/set comprehensions
+    "RET",       # flake8-return: Enforces consistent return statements
+    "ARG",       # flake8-unused-arguments: Flags unused function arguments
+    "PTH",       # flake8-use-pathlib: Encourages `pathlib` over `os.path`
+    "ISC",       # flake8-implicit-str-concat: Catches unintended string concatenation
+    "ICN",       # flake8-import-conventions: Enforces import naming conventions
+    "I",         # isort: Automatically sorts imports
+    "TRY",       # tryceratops: Improves exception handling
+    "N",         # pep8-naming: Enforces naming conventions
+]
+preview = true
+explicit-preview-rules = true
+
+ignore = [
+    "ARG001",  # Allow unused arguments
+    "ARG002",  # Allow unused method args
+    "ARG005",  # Allow unused lambda arguments
+    "D203",    # Require blank line before class docstring
+    "D213",    # Summary line on second line of docstring
+    "TRY003",  # Allow long exception messages
+    "F722",    # Allow certain forward references like "b ..." in Shaped[np.ndarray, "b ..."]
+]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff]
+line-length = 120
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+
+    "cfg",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/*" = ["E402"]
+"main_isaac.py" = ["ALL"]
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"  # Enforce double quotes for strings
+multiline-quotes = "double"  # Enforce double quotes for multiline strings
+docstring-quotes = "double"  # Enforce double quotes for docstrings
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+addopts = [
+    "-p", "no:launch_testing",
+    "-p", "no:launch_ros",
+    "-p", "no:ament_pep257",
+    "-p", "no:ament_copyright",
+    "-p", "no:ament_xmllint",
+    "-p", "no:ament_lint",
+    "-p", "no:ament_flake8",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+exclude = [
+    "cfg"
+]
