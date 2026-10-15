@@ -11,7 +11,6 @@ from mjlab.sensor import CameraSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.sim.sim import Simulation
 from mjlab.terrains import TerrainEntityCfg
-from PIL import Image
 
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.tensor_math import quat_from_matrix
@@ -334,36 +333,36 @@ class MjGen3Env(MjDirectRlEnv):
         camera_data = self._wrist_camera.data
         latest = self._rgbd_from_sensor(self._wrist_camera, pose)
 
-        def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
-            """Colorize a depth image and return a PIL Image.
+        # def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
+        #     """Colorize a depth image and return a PIL Image.
 
-            Args:
-                depth:     HxW float array (meters or raw units)
-                min_depth: clip minimum (defaults to array min) in meters
-                max_depth: clip maximum (defaults to array max) in meters
-                colormap:  any matplotlib colormap name
+        #     Args:
+        #         depth:     HxW float array (meters or raw units)
+        #         min_depth: clip minimum (defaults to array min) in meters
+        #         max_depth: clip maximum (defaults to array max) in meters
+        #         colormap:  any matplotlib colormap name
 
-            """
-            import matplotlib.pyplot as plt
+        #     """
+        #     import matplotlib.pyplot as plt
 
-            if depth.dtype == np.uint16:
-                depth = depth.astype(np.float32) / 1000
+        #     if depth.dtype == np.uint16:
+        #         depth = depth.astype(np.float32) / 1000
 
-            min_d = min_depth if min_depth is not None else np.nanmin(depth)
-            max_d = max_depth if max_depth is not None else np.nanmax(depth)
+        #     min_d = min_depth if min_depth is not None else np.nanmin(depth)
+        #     max_d = max_depth if max_depth is not None else np.nanmax(depth)
 
-            # Normalize to [0, 1]
-            normalized = (depth - min_d) / (max_d - min_d + 1e-8)
-            normalized = np.clip(normalized, 0, 1)
+        #     # Normalize to [0, 1]
+        #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
+        #     normalized = np.clip(normalized, 0, 1)
 
-            # Apply colormap → RGBA float array → uint8
-            cmap = plt.get_cmap(colormap)
-            colored = (cmap(normalized) * 255).astype(np.uint8)
+        #     # Apply colormap → RGBA float array → uint8
+        #     cmap = plt.get_cmap(colormap)
+        #     colored = (cmap(normalized) * 255).astype(np.uint8)
 
-            return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
+        #     return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
 
-        Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
-        colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
+        # Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
+        # colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
         return latest
 
     @property
