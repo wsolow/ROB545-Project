@@ -69,8 +69,7 @@ def get_gen3_spec() -> mujoco.MjSpec:
     # Attach keeps the parent scene's <option> and warns on conflicts. The XML
     # requests implicitfast; MujocoCfg applies that integrator after compile.
     spec.option.integrator = mujoco.mjtIntegrator.mjINT_EULER
-    # MjLab keeps only the first keyframe. Drop the XML home/retract poses so
-    # the keyframe added from EntityCfg.init_state is the one the scene uses.
+
     for key in list(spec.keys):
         spec.delete(key)
     return spec

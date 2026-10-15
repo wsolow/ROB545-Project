@@ -47,11 +47,11 @@ def main() -> None:
     env = create_env(args_cli.task, env_cfg)
 
     if args_cli.teleop_device.lower() == "keyboard":
-        teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=10, reference_frame="tcp"))
+        teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=0.2, reference_frame="tcp"))
     elif args_cli.teleop_device.lower() == "vr_joystick":
-        teleop_interface = VRJoystick(VRJoystickCfg(pos_sensitivity=0.15, rot_sensitivity=10))
+        teleop_interface = VRJoystick(VRJoystickCfg(pos_sensitivity=0.15, rot_sensitivity=0.5))
     elif args_cli.teleop_device.lower() == "vr_headset":
-        teleop_interface = VRHeadset(VRHeadsetCfg(pos_sensitivity=0.15, rot_sensitivity=10))
+        teleop_interface = VRHeadset(VRHeadsetCfg(pos_sensitivity=0.15, rot_sensitivity=0.5))
     elif args_cli.teleop_device.lower() == "xbox":
         teleop_interface = XboxController(XboxControllerCfg(pos_sensitivity=0.12, rot_sensitivity=25))
     else:

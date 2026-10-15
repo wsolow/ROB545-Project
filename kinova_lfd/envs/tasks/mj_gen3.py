@@ -34,7 +34,7 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
     joint_ids = [0, 1, 2, 3, 4, 5, 6, 0]
     tcp_offset = [0.0, 0.0, 0.120, 1.0, 0.0, 0.0, 0.0]
 
-    sim = SimulationCfg(mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
+    sim = SimulationCfg(njmax=300, nconmax=50, mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
 
     scene = SceneCfg(
         num_envs=1,
@@ -92,7 +92,6 @@ class MjGen3Env(MjDirectRlEnv):
         self.robot_dof_upper_limits[self.robot_dof_upper_limits == float("inf")] = torch.pi
 
         self.robot_dof_targets = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
-        self.robot_dof_targets_prev = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
         self._curr_gripper_goal = None
 
         self.ee_link_idx = self.robot.find_bodies(self.cfg.ee_link_name)[0][0]
@@ -124,11 +123,7 @@ class MjGen3Env(MjDirectRlEnv):
 
         self.cfg.scene.entities = {
             "robot": get_gen3_robot_cfg(),
-            "red_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="red_block", rgba=(0.8, 0.1, 0.1, 1.0))),
-            "blue_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="blue_block", rgba=(0.1, 0.1, 0.8, 1.0))),
             "pink_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="pink_block", rgba=(1.0, 0.4, 0.7, 1.0))),
-            "green_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="green_block", rgba=(0.1, 0.8, 0.1, 1.0))),
-            "yellow_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="yellow_block", rgba=(0.9, 0.9, 0.1, 1.0))),
         }
 
         # Initialize scene and simulation.
@@ -148,11 +143,7 @@ class MjGen3Env(MjDirectRlEnv):
 
         # Get the robot from the scene
         self._cubes = {
-            "red_block": self.scene.entities["red_block"],
-            "blue_block": self.scene.entities["blue_block"],
             "pink_block": self.scene.entities["pink_block"],
-            "green_block": self.scene.entities["green_block"],
-            "yellow_block": self.scene.entities["yellow_block"],
         }
         self._robot = self.scene.entities["robot"]
         self._tabletop_camera = self.scene.sensors["tabletop_camera"]
@@ -168,13 +159,9 @@ class MjGen3Env(MjDirectRlEnv):
             self.actions = targets.clone()
         elif action_spec == ActionSpec.TWIST_TCP:
             twist = actions[:, :6]
-            if torch.any(twist.abs() > 1e-6):
-                # dq tracks an integrated tool pose, so the setpoint has to start
-                # from the measured joints. Re-seeding while the twist is zero
-                # would copy gravity sag into the hold command.
-                arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_pos(
-                    twist, smoothing=False
-                )
+            dq = self._diff_ik.compute_joint_pos(twist, smoothing=False)
+            if self._diff_ik.active:
+                arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + dq
             else:
                 arm_targets = self.robot_dof_targets[:, :-1]
             targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
@@ -184,34 +171,15 @@ class MjGen3Env(MjDirectRlEnv):
             self.actions = actions.clone()
         else:
             raise NotImplementedError
-        self.robot_dof_targets_prev = self.robot_dof_targets
         self.robot_dof_targets = self.actions.clone()
 
-    def _apply_action(self):
-        gripper_moving = self._start_gripper(self.robot_dof_targets, close_time=0.75)
+    def _apply_action(self) -> None:
+        """Send the action to the robot."""
         self.robot.set_tendon_len_target(
             torch.where(self.robot_dof_targets[:, -1:] > 0, 255, self.robot_dof_targets[:, -1:]),
             tendon_ids=self.cfg.joint_ids[-1:],
         )
-        if not gripper_moving:
-            self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self.cfg.joint_ids[:-1])
-
-    def _start_gripper(self, joint_pos: torch.Tensor, close_time: float = 0.5) -> bool:
-        """Start the gripper timer for if it should close or not.
-
-        NOTE: this does not current have batch support.
-        """
-        gripper_val = joint_pos[:, -1]
-        if gripper_val != self._curr_gripper_goal:
-            self._curr_gripper_goal = gripper_val
-            self._new_gripper_goal = True
-            self._gripper_goal_start = time.perf_counter()
-        elif (time.perf_counter() - self._gripper_goal_start) < close_time:
-            self._new_gripper_goal = True
-        else:
-            self._new_gripper_goal = False
-
-        return self._new_gripper_goal
+        self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self.cfg.joint_ids[:-1])
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Terminate if max length is reached."""
@@ -241,11 +209,7 @@ class MjGen3Env(MjDirectRlEnv):
 
         # Cubes
         self._init_cube_poses = {
-            "red_block": [0.25, 0, 0.021],
-            "blue_block": [0.30, 0, 0.021],
             "pink_block": [0.35, 0, 0.021],
-            "green_block": [0.40, 0, 0.021],
-            "yellow_block": [0.45, 0, 0.021],
         }
         for cube in self._cubes:
             self._cubes[cube].write_root_link_pose_to_sim(

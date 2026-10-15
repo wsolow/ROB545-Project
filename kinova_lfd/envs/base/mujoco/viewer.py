@@ -4,6 +4,7 @@ from typing import override
 import mujoco
 import torch
 from mjlab.viewer import NativeMujocoViewer
+from mjlab.viewer.native.keys import KEY_A, KEY_R
 from mjlab.viewer.base import (
     PolicyProtocol,
     VerbosityLevel,
@@ -71,6 +72,13 @@ class MjViewer(NativeMujocoViewer):
 
         if self.enable_perturbations:
             self.log("[INFO] Interactive perturbations enabled", VerbosityLevel.INFO)
+
+    @override
+    def _safe_key_callback(self, key: int) -> None:
+        # A and R move the arm. The base viewer also binds them to debug toggles.
+        if isinstance(self.policy, DeviceBase) and key in (KEY_A, KEY_R):
+            return
+        super()._safe_key_callback(key)
 
     @override
     def _execute_step(self) -> bool:
