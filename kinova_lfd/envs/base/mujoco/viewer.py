@@ -1,10 +1,10 @@
 from collections.abc import Callable
 from typing import override
 
+import cv2
 import mujoco
 import torch
 from mjlab.viewer import NativeMujocoViewer
-from mjlab.viewer.native.keys import KEY_A, KEY_R
 from mjlab.viewer.base import (
     PolicyProtocol,
     VerbosityLevel,
@@ -12,6 +12,7 @@ from mjlab.viewer.base import (
 from mjlab.viewer.model_sync import (
     disable_model_sameframe_shortcuts,
 )
+from mjlab.viewer.native.keys import KEY_A, KEY_R
 from mjlab.viewer.native.viewer import PlotCfg
 
 from kinova_lfd.core.specs import ActionSpec
@@ -29,10 +30,16 @@ class MjViewer(NativeMujocoViewer):
         plot_cfg: PlotCfg | None = None,
         enable_perturbations: bool = True,
         verbosity: VerbosityLevel = VerbosityLevel.SILENT,
+        view_wrist: bool = True,
+        view_tabletop: bool = True,
     ):
-        super().__init__(env, policy, frame_rate, verbosity)
+        super().__init__(env, policy, frame_rate, key_callback, plot_cfg, enable_perturbations, verbosity)
         if isinstance(self.policy, DeviceBase):
             self.policy.start()
+        self._view_wrist = view_wrist
+        self._view_tabletop = view_tabletop
+        self._rgbd_wrist = None
+        self._rgbd_table = None
 
     @override
     def setup(self) -> None:
@@ -88,6 +95,14 @@ class MjViewer(NativeMujocoViewer):
         """
         with torch.no_grad():
             obs = self.env.get_observations()
+            self._rgbd_wrist = self.env._get_latest_rgbd_wrist()
+            if self._view_wrist and self._rgbd_wrist is not None:
+                cv2.imshow("RGB Wrist", self._rgbd_wrist["rgb"].squeeze().cpu().numpy().transpose(1, 2, 0))
+                cv2.waitKey(1)
+            self._rgbd_table = self.env._get_latest_rgbd()
+            if self._view_tabletop and self._rgbd_table is not None:
+                cv2.imshow("RGB Tabletop", self._rgbd_table["rgb"].squeeze().cpu().numpy().transpose(1, 2, 0))
+                cv2.waitKey(1)
             if self.policy is not None:
                 if isinstance(self.policy, DeviceBase):
                     actions = self.policy(self.env._robot_tool_pose_b)
@@ -101,11 +116,3 @@ class MjViewer(NativeMujocoViewer):
             self._step_count += 1
             self._stats_steps += 1
             return True
-        # except Exception:
-        #     self._last_error = traceback.format_exc()
-        #     self.log(
-        #         f"[ERROR] Exception during step:\n{self._last_error}",
-        #         VerbosityLevel.SILENT,
-        #     )
-        #     self.pause()
-        #     return False

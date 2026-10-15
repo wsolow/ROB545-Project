@@ -59,7 +59,7 @@ def main() -> None:
 
     env.reset()
 
-    MjViewer(env, teleop_interface).run()
+    MjViewer(env, teleop_interface, view_tabletop=False, view_wrist=False).run()
 
 
 if __name__ == "__main__":

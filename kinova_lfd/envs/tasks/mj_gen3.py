@@ -11,8 +11,10 @@ from mjlab.sensor import CameraSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.sim.sim import Simulation
 from mjlab.terrains import TerrainEntityCfg
+from PIL import Image
 
 from kinova_lfd.core.specs import ActionSpec
+from kinova_lfd.core.tensor_math import quat_from_matrix
 from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
 from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.base.mujoco.controllers.differential_ik import MjDifferentialIk
@@ -53,6 +55,16 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
                 pos=[0.4, -0.5, 0.3],
                 quat=[0.8192, 0.5736, 0.0, 0.0],
                 fovy=90,
+                data_types=("rgb", "depth"),
+                use_shadows=True,
+                use_textures=True,
+                clone_data=True,
+            ),
+            CameraSensorCfg(
+                name="wrist_camera",
+                camera_name="robot/wrist",
+                width=640,
+                height=480,
                 data_types=("rgb", "depth"),
                 use_shadows=True,
                 use_textures=True,
@@ -147,6 +159,7 @@ class MjGen3Env(MjDirectRlEnv):
         }
         self._robot = self.scene.entities["robot"]
         self._tabletop_camera = self.scene.sensors["tabletop_camera"]
+        self._wrist_camera = self.scene.sensors["wrist_camera"]
 
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
         if action_spec == ActionSpec.MOVE_TCP:
@@ -233,6 +246,30 @@ class MjGen3Env(MjDirectRlEnv):
         Compute vlaues in the world frame
         """
 
+    def _rgbd_from_sensor(self, camera, camera_pose: torch.Tensor) -> dict:
+        """Pack RGB, depth, intrinsics, and pose for one camera sensor."""
+        height = camera.cfg.height
+        width = camera.cfg.width
+        fovy_deg = camera.cfg.fovy
+        if fovy_deg is None:
+            fovy_deg = float(self.sim.mj_model.cam_fovy[camera.camera_idx])
+
+        fy = (height / 2.0) / np.tan(np.radians(fovy_deg / 2.0))
+        fx = fy  # square pixels
+        cx = width / 2.0
+        cy = height / 2.0
+        intrinsic_k = torch.as_tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], device=self.device)
+
+        camera_data = camera.data
+        return {
+            "rgb": camera_data.rgb.permute(0, 3, 1, 2),
+            # (camera_data.depth.permute(0, 3, 1, 2) * 1000).to(torch.uint16)[:, 0] # TODO changing this here has downstream effects?
+            "depth": camera_data.depth.permute(0, 3, 1, 2)[:, 0],
+            "timestamp": time.perf_counter(),
+            "camera_pose": camera_pose,
+            "intrinsic_k": intrinsic_k,
+        }
+
     def _get_latest_rgbd(self):
         """Grab the latest RGBD image from the Mujoco simulator.
 
@@ -245,28 +282,57 @@ class MjGen3Env(MjDirectRlEnv):
           - ``timestamp``: float timestamp in seconds
 
         """
-        from PIL import Image
-
-        height = self._tabletop_camera.cfg.height
-        width = self._tabletop_camera.cfg.width
-        fovy_deg = self._tabletop_camera.cfg.fovy
-
-        fy = (height / 2.0) / np.tan(np.radians(fovy_deg / 2.0))
-        fx = fy  # square pixels
-        cx = width / 2.0
-        cy = height / 2.0
-        intrinsic_k = torch.as_tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], device=self.device)
-
-        latest = {}
-        camera_data = self._tabletop_camera.data
-        latest["rgb"] = camera_data.rgb.permute(0, 3, 1, 2)
-        # latest["depth"] = (camera_data.depth.permute(0, 3, 1, 2) * 1000).to(torch.uint16)[:, 0] # TODO changing this here has downstream effects?
-        latest["depth"] = camera_data.depth.permute(0, 3, 1, 2)[:, 0]
-        latest["timestamp"] = time.perf_counter()
-        latest["camera_pose"] = torch.as_tensor(
-            self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device
+        latest = self._rgbd_from_sensor(
+            self._tabletop_camera,
+            torch.as_tensor(self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device),
         )
-        latest["intrinsic_k"] = intrinsic_k
+        # camera_data = self._tabletop_camera.data
+
+        # def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
+        #     """Colorize a depth image and return a PIL Image.
+
+        #     Args:
+        #         depth:     HxW float array (meters or raw units)
+        #         min_depth: clip minimum (defaults to array min) in meters
+        #         max_depth: clip maximum (defaults to array max) in meters
+        #         colormap:  any matplotlib colormap name
+
+        #     """
+        #     import matplotlib.pyplot as plt
+
+        #     if depth.dtype == np.uint16:
+        #         depth = depth.astype(np.float32) / 1000
+
+        #     min_d = min_depth if min_depth is not None else np.nanmin(depth)
+        #     max_d = max_depth if max_depth is not None else np.nanmax(depth)
+
+        #     # Normalize to [0, 1]
+        #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
+        #     normalized = np.clip(normalized, 0, 1)
+
+        #     # Apply colormap → RGBA float array → uint8
+        #     cmap = plt.get_cmap(colormap)
+        #     colored = (cmap(normalized) * 255).astype(np.uint8)
+
+        #     return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
+
+        # Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
+        # colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
+
+        return latest
+
+    def _get_latest_rgbd_wrist(self):
+        """Grab the latest RGBD image from the wrist camera on the Gen3.
+
+        Same dictionary as ``_get_latest_rgbd``. ``camera_pose`` is the wrist
+        camera's current world pose, because that camera is fixed to the arm.
+        """
+        cam_idx = self._wrist_camera.camera_idx
+        pos = torch.as_tensor(self.sim.data.cam_xpos[:, cam_idx], device=self.device, dtype=torch.float32)
+        xmat = torch.as_tensor(self.sim.data.cam_xmat[:, cam_idx], device=self.device, dtype=torch.float32)
+        pose = torch.cat((pos, quat_from_matrix(xmat)), dim=-1).squeeze(0)
+        camera_data = self._wrist_camera.data
+        latest = self._rgbd_from_sensor(self._wrist_camera, pose)
 
         def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
             """Colorize a depth image and return a PIL Image.
@@ -298,7 +364,6 @@ class MjGen3Env(MjDirectRlEnv):
 
         Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
         colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
-
         return latest
 
     @property
