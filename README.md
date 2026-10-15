@@ -9,4 +9,7 @@
 After installing the above project dependencies, try running 
 ```scripts/mj_teleop.py```
 
+To view the wirst and tabletop camera run which will bring up cv2 windows:
+```scripts/mj_teleop.py --wrist_camera --tabletop_camera
+
 On the first run, this should take a few minutes to configure the CUDA kernel with Mujoco Warp. After that a window should pop up (see window.png for example) with the kinova arm. If you press "k" you should see the gripper open and close. 

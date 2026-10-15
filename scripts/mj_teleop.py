@@ -32,6 +32,18 @@ parser.add_argument(
     help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
 )
 parser.add_argument("--log_dir", type=str, default="exp/tabletop_admittance/", help="Log location")
+parser.add_argument(
+    "--tabletop_camera",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="View table camera",
+)
+parser.add_argument(
+    "--wrist_camera",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="View wrist camera",
+)
 
 # parse the arguments
 args_cli = parser.parse_args()
@@ -59,7 +71,7 @@ def main() -> None:
 
     env.reset()
 
-    MjViewer(env, teleop_interface, view_tabletop=False, view_wrist=False).run()
+    MjViewer(env, teleop_interface, view_tabletop=args_cli.tabletop_camera, view_wrist=args_cli.wrist_camera).run()
 
 
 if __name__ == "__main__":
