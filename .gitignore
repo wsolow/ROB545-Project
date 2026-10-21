@@ -1,3 +1,5 @@
 .vscode
 __pycache__/
 kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/
+
+**build/

@@ -197,11 +197,8 @@ class KortexUDPBridge:
         if not self.binary.is_file():
             raise FileNotFoundError(
                 "Kortex UDP bridge is not built at "
-                f"{self.binary}. From the repo root:\n"
-                "  cmake -S kinova_lfd/envs/base/kortex/kortex_udp/cpp "
-                "-B kinova_lfd/envs/base/kortex/kortex_udp/cpp/build "
-                "-DKORTEX_DIR=/path/to/kortex_api\n"
-                "  cmake --build kinova_lfd/envs/base/kortex/kortex_udp/cpp/build"
+                f"{self.binary}. Build instructions are in the top-level README "
+                "under \"Kortex UDP bridge\"."
             )
 
         self._fb_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
