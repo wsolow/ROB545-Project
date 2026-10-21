@@ -1,4 +1,4 @@
-# Install script for directory: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp
+# Install script for directory: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

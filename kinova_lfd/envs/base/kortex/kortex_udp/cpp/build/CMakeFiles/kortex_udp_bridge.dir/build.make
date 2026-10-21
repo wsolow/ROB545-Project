@@ -53,10 +53,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp
+CMAKE_SOURCE_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build
+CMAKE_BINARY_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build
 
 # Include any dependencies generated for this target.
 include CMakeFiles/kortex_udp_bridge.dir/depend.make
@@ -70,47 +70,111 @@ include CMakeFiles/kortex_udp_bridge.dir/progress.make
 include CMakeFiles/kortex_udp_bridge.dir/flags.make
 
 CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
-CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/kortex_udp_bridge.cpp
+CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/kortex_udp_bridge.cpp
 CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/kortex_udp_bridge.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/kortex_udp_bridge.cpp
 
 CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/kortex_udp_bridge.cpp > CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/kortex_udp_bridge.cpp > CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.i
 
 CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/kortex_udp_bridge.cpp -o CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/kortex_udp_bridge.cpp -o CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.s
 
-CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
-CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/controller.cpp
-CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/controller.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
+CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/controller.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/controller.cpp
 
-CMakeFiles/kortex_udp_bridge.dir/controller.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/controller.cpp > CMakeFiles/kortex_udp_bridge.dir/controller.cpp.i
+CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/controller.cpp > CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.i
 
-CMakeFiles/kortex_udp_bridge.dir/controller.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/controller.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller.cpp.s
+CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/controller.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.s
+
+CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
+CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/gen3_model.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/gen3_model.cpp
+
+CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/gen3_model.cpp > CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.i
+
+CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/gen3_model.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.s
+
+CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
+CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/joint_trajectory_controller.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/joint_trajectory_controller.cpp
+
+CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/joint_trajectory_controller.cpp > CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i
+
+CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/joint_trajectory_controller.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/servo_config.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/servo_config.cpp
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/servo_config.cpp > CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.i
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/servo_config.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.s
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/flags.make
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o: /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/twist_controller.cpp
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o: CMakeFiles/kortex_udp_bridge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o -MF CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o.d -o CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o -c /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/twist_controller.cpp
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/twist_controller.cpp > CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.i
+
+CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/twist_controller.cpp -o CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.s
 
 # Object files for target kortex_udp_bridge
 kortex_udp_bridge_OBJECTS = \
 "CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o" \
-"CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o"
+"CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o" \
+"CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o" \
+"CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o" \
+"CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o" \
+"CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o"
 
 # External object files for target kortex_udp_bridge
 kortex_udp_bridge_EXTERNAL_OBJECTS =
 
 kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o
-kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o
+kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o
+kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o
+kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o
+kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o
+kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o
 kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/build.make
 kortex_udp_bridge: /home/will-solow/Projects/IRAS-Kinova/build/kortex_driver/_deps/kinova_binary_api-src/lib/release/libKortexApiCpp.a
 kortex_udp_bridge: CMakeFiles/kortex_udp_bridge.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable kortex_udp_bridge"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Linking CXX executable kortex_udp_bridge"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/kortex_udp_bridge.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -122,6 +186,6 @@ CMakeFiles/kortex_udp_bridge.dir/clean:
 .PHONY : CMakeFiles/kortex_udp_bridge.dir/clean
 
 CMakeFiles/kortex_udp_bridge.dir/depend:
-	cd /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles/kortex_udp_bridge.dir/DependInfo.cmake "--color=$(COLOR)"
+	cd /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles/kortex_udp_bridge.dir/DependInfo.cmake "--color=$(COLOR)"
 .PHONY : CMakeFiles/kortex_udp_bridge.dir/depend
 

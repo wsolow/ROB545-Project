@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp
+CMAKE_SOURCE_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build
+CMAKE_BINARY_DIR = /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex_udp/cpp/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -129,29 +129,125 @@ kortex_udp_bridge/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/build
 .PHONY : kortex_udp_bridge/fast
 
-controller.o: controller.cpp.o
-.PHONY : controller.o
+controller/controller.o: controller/controller.cpp.o
+.PHONY : controller/controller.o
 
 # target to build an object file
-controller.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller.cpp.o
-.PHONY : controller.cpp.o
+controller/controller.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.o
+.PHONY : controller/controller.cpp.o
 
-controller.i: controller.cpp.i
-.PHONY : controller.i
+controller/controller.i: controller/controller.cpp.i
+.PHONY : controller/controller.i
 
 # target to preprocess a source file
-controller.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller.cpp.i
-.PHONY : controller.cpp.i
+controller/controller.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.i
+.PHONY : controller/controller.cpp.i
 
-controller.s: controller.cpp.s
-.PHONY : controller.s
+controller/controller.s: controller/controller.cpp.s
+.PHONY : controller/controller.s
 
 # target to generate assembly for a file
-controller.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller.cpp.s
-.PHONY : controller.cpp.s
+controller/controller.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/controller.cpp.s
+.PHONY : controller/controller.cpp.s
+
+controller/gen3_model.o: controller/gen3_model.cpp.o
+.PHONY : controller/gen3_model.o
+
+# target to build an object file
+controller/gen3_model.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.o
+.PHONY : controller/gen3_model.cpp.o
+
+controller/gen3_model.i: controller/gen3_model.cpp.i
+.PHONY : controller/gen3_model.i
+
+# target to preprocess a source file
+controller/gen3_model.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.i
+.PHONY : controller/gen3_model.cpp.i
+
+controller/gen3_model.s: controller/gen3_model.cpp.s
+.PHONY : controller/gen3_model.s
+
+# target to generate assembly for a file
+controller/gen3_model.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/gen3_model.cpp.s
+.PHONY : controller/gen3_model.cpp.s
+
+controller/joint_trajectory_controller/joint_trajectory_controller.o: controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.o
+
+# target to build an object file
+controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.cpp.o
+
+controller/joint_trajectory_controller/joint_trajectory_controller.i: controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.i
+
+# target to preprocess a source file
+controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.cpp.i
+
+controller/joint_trajectory_controller/joint_trajectory_controller.s: controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.s
+
+# target to generate assembly for a file
+controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s
+.PHONY : controller/joint_trajectory_controller/joint_trajectory_controller.cpp.s
+
+controller/twist_controller/servo_config.o: controller/twist_controller/servo_config.cpp.o
+.PHONY : controller/twist_controller/servo_config.o
+
+# target to build an object file
+controller/twist_controller/servo_config.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.o
+.PHONY : controller/twist_controller/servo_config.cpp.o
+
+controller/twist_controller/servo_config.i: controller/twist_controller/servo_config.cpp.i
+.PHONY : controller/twist_controller/servo_config.i
+
+# target to preprocess a source file
+controller/twist_controller/servo_config.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.i
+.PHONY : controller/twist_controller/servo_config.cpp.i
+
+controller/twist_controller/servo_config.s: controller/twist_controller/servo_config.cpp.s
+.PHONY : controller/twist_controller/servo_config.s
+
+# target to generate assembly for a file
+controller/twist_controller/servo_config.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/servo_config.cpp.s
+.PHONY : controller/twist_controller/servo_config.cpp.s
+
+controller/twist_controller/twist_controller.o: controller/twist_controller/twist_controller.cpp.o
+.PHONY : controller/twist_controller/twist_controller.o
+
+# target to build an object file
+controller/twist_controller/twist_controller.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.o
+.PHONY : controller/twist_controller/twist_controller.cpp.o
+
+controller/twist_controller/twist_controller.i: controller/twist_controller/twist_controller.cpp.i
+.PHONY : controller/twist_controller/twist_controller.i
+
+# target to preprocess a source file
+controller/twist_controller/twist_controller.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.i
+.PHONY : controller/twist_controller/twist_controller.cpp.i
+
+controller/twist_controller/twist_controller.s: controller/twist_controller/twist_controller.cpp.s
+.PHONY : controller/twist_controller/twist_controller.s
+
+# target to generate assembly for a file
+controller/twist_controller/twist_controller.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kortex_udp_bridge.dir/build.make CMakeFiles/kortex_udp_bridge.dir/controller/twist_controller/twist_controller.cpp.s
+.PHONY : controller/twist_controller/twist_controller.cpp.s
 
 kortex_udp_bridge.o: kortex_udp_bridge.cpp.o
 .PHONY : kortex_udp_bridge.o
@@ -186,9 +282,21 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... kortex_udp_bridge"
-	@echo "... controller.o"
-	@echo "... controller.i"
-	@echo "... controller.s"
+	@echo "... controller/controller.o"
+	@echo "... controller/controller.i"
+	@echo "... controller/controller.s"
+	@echo "... controller/gen3_model.o"
+	@echo "... controller/gen3_model.i"
+	@echo "... controller/gen3_model.s"
+	@echo "... controller/joint_trajectory_controller/joint_trajectory_controller.o"
+	@echo "... controller/joint_trajectory_controller/joint_trajectory_controller.i"
+	@echo "... controller/joint_trajectory_controller/joint_trajectory_controller.s"
+	@echo "... controller/twist_controller/servo_config.o"
+	@echo "... controller/twist_controller/servo_config.i"
+	@echo "... controller/twist_controller/servo_config.s"
+	@echo "... controller/twist_controller/twist_controller.o"
+	@echo "... controller/twist_controller/twist_controller.i"
+	@echo "... controller/twist_controller/twist_controller.s"
 	@echo "... kortex_udp_bridge.o"
 	@echo "... kortex_udp_bridge.i"
 	@echo "... kortex_udp_bridge.s"

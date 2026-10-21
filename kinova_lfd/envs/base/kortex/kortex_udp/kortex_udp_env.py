@@ -4,8 +4,8 @@ Kortex environment that steps at 30 Hz and lets a C++ process servo the Gen3 at 
 
 ``self.kortex`` and ``self.kortex_c`` talk to that process. They do not import or
 call the Kortex Python API. Joint-position and twist setpoints are forwarded as
-the latest command; the C++ controllers do not yet turn them into a 1 kHz
-joint trajectory.
+the latest command. The C++ twist controller turns tool twists into joint
+positions at 1 kHz.
 
 Written by Will Solow, 2026
 """

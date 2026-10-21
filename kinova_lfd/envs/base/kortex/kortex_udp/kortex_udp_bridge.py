@@ -30,7 +30,10 @@ from kinova_lfd.envs.base.kortex.kortex_udp.ipc import (
 )
 
 _CPP_DIR = Path(__file__).resolve().parent / "cpp"
+_PKG_DIR = _CPP_DIR.parent
 _DEFAULT_BINARY = _CPP_DIR / "build" / "kortex_udp_bridge"
+_DEFAULT_URDF = _PKG_DIR / "assets" / "gen3_2f85.urdf"
+_DEFAULT_SERVO = _PKG_DIR / "config" / "servo.yaml"
 
 
 def default_bridge_binary() -> Path:
@@ -195,10 +198,10 @@ class KortexUDPBridge:
             raise FileNotFoundError(
                 "Kortex UDP bridge is not built at "
                 f"{self.binary}. From the repo root:\n"
-                "  cmake -S kinova_lfd/envs/base/kortex_udp/cpp "
-                "-B kinova_lfd/envs/base/kortex_udp/cpp/build "
+                "  cmake -S kinova_lfd/envs/base/kortex/kortex_udp/cpp "
+                "-B kinova_lfd/envs/base/kortex/kortex_udp/cpp/build "
                 "-DKORTEX_DIR=/path/to/kortex_api\n"
-                "  cmake --build kinova_lfd/envs/base/kortex_udp/cpp/build"
+                "  cmake --build kinova_lfd/envs/base/kortex/kortex_udp/cpp/build"
             )
 
         self._fb_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -220,6 +223,10 @@ class KortexUDPBridge:
             "--feedback-port",
             str(feedback_port),
             "--watch-parent",
+            "--urdf",
+            str(_DEFAULT_URDF),
+            "--servo-config",
+            str(_DEFAULT_SERVO),
         ]
         if self.dry_run:
             command.append("--dry-run")
