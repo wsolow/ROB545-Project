@@ -360,6 +360,7 @@ CMakeFiles/kortex_udp_bridge.dir/kortex_udp_bridge.cpp.o: \
  /usr/include/eigen3/Eigen/src/Core/util/ReenableStupidWarnings.h \
  /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/joint_trajectory_controller.hpp \
  /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/../controller.hpp \
+ /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/joint_trajectory_controller/../gen3_model.hpp \
  /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/twist_controller.hpp \
  /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/../controller.hpp \
  /home/will-solow/Projects/ROB545-Project/kinova_lfd/envs/base/kortex/kortex_udp/cpp/controller/twist_controller/../gen3_model.hpp \

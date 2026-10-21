@@ -38,7 +38,7 @@ inline constexpr uint32_t kFlagLowLevel = 1u;
 #pragma pack(push, 1)
 
 // Joints are radians. Gripper is [0, 1]. Twist is tool-frame linear m/s and angular deg/s,
-// matching Kortex SendTwistCommand.
+// matching Kortex SendTwistCommand. duration_s is the requested joint-trajectory time.
 struct CommandPacket {
     uint32_t magic;
     uint32_t type;
@@ -47,6 +47,7 @@ struct CommandPacket {
     float joints[kArmDofs];
     float gripper;
     float twist[kTwistDofs];
+    float duration_s;
 };
 
 struct ControlPacket {
@@ -83,7 +84,7 @@ struct FeedbackPacket {
 
 #pragma pack(pop)
 
-static_assert(sizeof(CommandPacket) == 72, "CommandPacket size drifted from ipc.py");
+static_assert(sizeof(CommandPacket) == 76, "CommandPacket size drifted from ipc.py");
 static_assert(sizeof(ControlPacket) == 20, "ControlPacket size drifted from ipc.py");
 static_assert(sizeof(FeedbackPacket) == 196, "FeedbackPacket size drifted from ipc.py");
 

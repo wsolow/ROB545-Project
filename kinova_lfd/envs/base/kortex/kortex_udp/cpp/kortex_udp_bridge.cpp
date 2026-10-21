@@ -11,8 +11,8 @@
 // The Python KortexUDPEnv sends joint-position or twist setpoints, plus a gripper
 // opening, at its step rate (30 Hz). This process keeps the latest datagram and
 // reads it on every 1 ms tick. Twist setpoints are converted to joint positions by
-// TwistController. Joint-position setpoints are recorded by JointTrajectoryController,
-// which still holds the measured pose. The gripper percent is applied directly on
+// TwistController. Joint-position setpoints are tracked by JointTrajectoryController
+// over the requested duration. The gripper percent is applied directly on
 // the cyclic interconnect command.
 
 #include "controller/controller.hpp"
@@ -636,7 +636,7 @@ void RunLoop(
     bool stop_requested = false;
 
     HoldController hold;
-    JointTrajectoryController joints;
+    JointTrajectoryController joints(urdf);
     TwistController twist(urdf, servo_config);
     Controller* active = &hold;
     active->Reset(state);

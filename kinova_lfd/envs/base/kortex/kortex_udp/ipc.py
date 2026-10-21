@@ -13,11 +13,11 @@ MAGIC = 0x4B555044
 ARM_DOFS = 7
 TWIST_DOFS = 6
 
-_COMMAND = struct.Struct("<IIII7ff6f")
+_COMMAND = struct.Struct("<IIII7ff6ff")
 _CONTROL = struct.Struct("<IIIII")
 _FEEDBACK = struct.Struct("<IIII18f21f3fIII")
 
-assert _COMMAND.size == 72
+assert _COMMAND.size == 76
 assert _CONTROL.size == 20
 assert _FEEDBACK.size == 196
 
@@ -74,6 +74,7 @@ def pack_command(
     joints_rad: tuple[float, ...],
     gripper: float,
     twist: tuple[float, ...],
+    duration_s: float = 0.0,
 ) -> bytes:
     """Pack a joint or twist setpoint.
 
@@ -83,6 +84,7 @@ def pack_command(
         joints_rad: Seven joint positions in radians. Unused entries may be zero.
         gripper: Opening in ``[0, 1]``.
         twist: Six tool-frame values, linear m/s then angular deg/s.
+        duration_s: Requested joint-trajectory duration. Ignored for twists.
 
     """
     if len(joints_rad) != ARM_DOFS:
@@ -97,6 +99,7 @@ def pack_command(
         *joints_rad,
         float(gripper),
         *twist,
+        float(duration_s),
     )
 
 

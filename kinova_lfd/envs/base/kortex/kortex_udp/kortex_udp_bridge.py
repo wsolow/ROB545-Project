@@ -119,12 +119,12 @@ class KortexBaseProxy:
         """
         self._bridge.set_servoing_mode(servoing_mode)
 
-    def send_joint_position(self, joints_rad: np.ndarray, gripper: float) -> None:
-        """Send seven joint positions in radians and a gripper opening in ``[0, 1]``."""
+    def send_joint_position(self, joints_rad: np.ndarray, gripper: float, duration_s: float = 1.0) -> None:
+        """Send seven joint positions in radians, a gripper opening, and a trajectory duration."""
         joints = np.asarray(joints_rad, dtype=np.float64).reshape(-1)
         if joints.size != ARM_DOFS:
             raise ValueError(f"expected {ARM_DOFS} joint positions, got {joints.size}")
-        self._bridge.send_setpoint(CommandMode.JOINT_POSITION, joints, gripper, np.zeros(TWIST_DOFS))
+        self._bridge.send_setpoint(CommandMode.JOINT_POSITION, joints, gripper, np.zeros(TWIST_DOFS), duration_s)
 
     def send_twist(self, twist: np.ndarray, gripper: float) -> None:
         """Send a tool twist (m/s and deg/s) and a gripper opening in ``[0, 1]``."""
@@ -285,6 +285,7 @@ class KortexUDPBridge:
         joints_rad: np.ndarray,
         gripper: float,
         twist: np.ndarray,
+        duration_s: float = 0.0,
     ) -> None:
         """Queue one setpoint. The C++ loop applies the latest packet at 1 kHz."""
         opening = float(np.clip(gripper, 0.0, 1.0))
@@ -293,7 +294,7 @@ class KortexUDPBridge:
         with self._lock:
             self._ensure_open()
             self._seq += 1
-            packet = pack_command(self._seq, mode, joints, opening, twist_cmd)
+            packet = pack_command(self._seq, mode, joints, opening, twist_cmd, duration_s)
             assert self._cmd_sock is not None
             assert self._cmd_addr is not None
             self._cmd_sock.sendto(packet, self._cmd_addr)

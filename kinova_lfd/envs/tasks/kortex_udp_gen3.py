@@ -105,7 +105,8 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         Args:
             actions: Setpoint, with the gripper opening in the last element.
             action_spec: ``JOINTS_POS``, ``TWIST_TCP``, or ``None`` for joint positions.
-            duration: Unused. The cyclic loop holds the setpoint until the next one.
+            duration: Requested joint-trajectory time in seconds. The controller
+                lengthens it when velocity or acceleration limits would be exceeded.
 
         """
         if actions.size < 1:
@@ -114,7 +115,7 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         if action_spec in (None, ActionSpec.JOINTS_POS):
             if actions.size < 8:
                 raise ValueError("joint position actions are 7 joints plus a gripper opening")
-            self.kortex.send_joint_position(actions[:7], gripper)
+            self.kortex.send_joint_position(actions[:7], gripper, duration)
             return
         if action_spec == ActionSpec.TWIST_TCP:
             if actions.size < 7:
