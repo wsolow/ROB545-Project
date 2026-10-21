@@ -1,3 +1,5 @@
+"""Construct a manipulation environment from a task name."""
+
 from typing import Any
 
 from kinova_lfd.envs.base.gym import GymEnv
@@ -5,16 +7,22 @@ from kinova_lfd.envs.base.gym import GymEnv
 
 def create_env(task_name: str, cfg: dict[str, Any]) -> GymEnv:
     """Create a Kortex environment for the given task name and configuration."""
-    if task_name == "Kortex-Gen3-v0":
+    if task_name == "Kortex-TCP-Gen3-v0":
         import os
 
         os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-        from kinova_lfd.envs.base.kortex.kortex_bridge import setup_kortex_tcp_udp
-        from kinova_lfd.envs.tasks.kortex_gen3 import Gen3KortexEnv, Gen3KortexEnvCfg
+        from kinova_lfd.envs.tasks.kortex_tcp_gen3 import Gen3KortexTcpEnv, Gen3KortexTcpEnvCfg
 
-        tcp_udp = setup_kortex_tcp_udp(ip=cfg["robot_ip"])
-        env_cfg = Gen3KortexEnvCfg(**cfg)
-        return Gen3KortexEnv(cfg=env_cfg, kortex_tcp_udp=tcp_udp)
+        env_cfg = Gen3KortexTcpEnvCfg(**cfg)
+        return Gen3KortexTcpEnv(cfg=env_cfg)
+    if task_name == "Kortex-UDP-Gen3-v0":
+        import os
+
+        os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+        from kinova_lfd.envs.tasks.kortex_udp_gen3 import Gen3KortexUdpEnv, Gen3KortexUdpEnvCfg
+
+        env_cfg = Gen3KortexUdpEnvCfg(**cfg)
+        return Gen3KortexUdpEnv(cfg=env_cfg)
     if task_name == "Mj-Gen3-v0":
         from kinova_lfd.envs.tasks.mj_gen3 import MjGen3Env, MjGen3EnvCfg
 

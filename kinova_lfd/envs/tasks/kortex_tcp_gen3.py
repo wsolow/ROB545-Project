@@ -18,9 +18,7 @@ import numpy as np
 from kortex_api.autogen.messages import Base_pb2
 
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.envs.base.kortex import KortexEnv, KortexEnvCfg
-from kinova_lfd.envs.base.kortex.kortex_bridge import DeviceConnection
-from kinova_lfd.envs.base.kortex.realsense import RealsenseCamera, WristCamera
+from kinova_lfd.envs.base.kortex import KortexTcpEnv, KortexTcpEnvCfg, RealsenseCamera, WristCamera
 
 
 class KortexAdmittanceMode(IntEnum):
@@ -37,7 +35,7 @@ class KortexAdmittanceMode(IntEnum):
 
 
 @dataclass
-class Gen3KortexEnvCfg(KortexEnvCfg):
+class Gen3KortexTcpEnvCfg(KortexTcpEnvCfg):
     """The configuration class for Kinova Gen3 Arm."""
 
     """Robot configuration"""
@@ -59,27 +57,24 @@ class Gen3KortexEnvCfg(KortexEnvCfg):
 
     arm_joint_names = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"]
 
-    use_udp: False
 
-
-class Gen3KortexEnv(KortexEnv):
+class Gen3KortexTcpEnv(KortexTcpEnv):
     """Kinova Gen3 7DoF Kortex implementation."""
 
     def __init__(
         self,
-        cfg: KortexEnvCfg,
-        kortex_tcp_udp: tuple[DeviceConnection, DeviceConnection],
+        cfg: KortexTcpEnvCfg,
         render_mode: str | None = None,
         **kwargs: dict[str, Any],
     ) -> None:
         """Initialize Gen3 Arm Kortex."""
-        super().__init__(cfg, kortex_tcp_udp=kortex_tcp_udp, render_mode=render_mode, **kwargs)
+        super().__init__(cfg, render_mode=render_mode, **kwargs)
 
         self.joint_names = np.asarray(self.cfg.arm_joint_names + self.cfg.gripper_joint_names)
         self.arm_joint_names = np.asarray(self.cfg.arm_joint_names)
         self.gripper_joint_names = np.asarray(self.cfg.gripper_joint_names)
 
-        self.active_controller = Base_pb2.LOW_LEVEL_SERVOING if self.cfg.use_udp else Base_pb2.SINGLE_LEVEL_SERVOING
+        self.active_controller = Base_pb2.SINGLE_LEVEL_SERVOING
         self.switch_controllers(self.active_controller)
         self._adm_mode = KortexAdmittanceMode.NONE
 
@@ -166,9 +161,6 @@ class Gen3KortexEnv(KortexEnv):
             else:
                 raise ValueError(f"Unknown Action Specification `{action_spec.name}`")
 
-        if self.cfg.use_udp:  # Send UDP command to robot and update feedback
-            self._feedback = self.kortex_c.Refresh(self._cyclic_cmd)
-
     def _reset_idx(self) -> None:
         """Reset environment based on specified indices to default position."""
         super()._reset_idx()
@@ -225,29 +217,15 @@ class Gen3KortexEnv(KortexEnv):
         gripper_val = float(joint_pos[-1])
         gripper_goal = max(0, min(gripper_val, 1))
 
-        if self.cfg.use_udp:  # Send over UDP
-            target_pos = 100 * gripper_goal
-            # Calculate speed according to position error
-            position_error = target_pos - self._feedback.interconnect.gripper_feedback.motor[0].position
-            # If positional error is small, stop gripper
-            if abs(position_error) < 1.5:
-                position_error = 0
-                self._cyclic_gripper_cmd.velocity = 0
-            else:
-                self._cyclic_gripper_cmd.velocity = 2.0 * abs(position_error)
-                self._cyclic_gripper_cmd.velocity = min(self._cyclic_gripper_cmd.velocity, 100.0)
-                self._cyclic_gripper_cmd.position = target_pos
+        if gripper_goal != self._curr_gripper_goal:
+            gripper_command = Base_pb2.GripperCommand()
+            finger = gripper_command.gripper.finger.add()
+            gripper_command.mode = Base_pb2.GRIPPER_POSITION
+            finger.finger_identifier = 1
+            finger.value = gripper_goal
 
-        else:  # Send over TCP
-            if gripper_goal != self._curr_gripper_goal:
-                gripper_command = Base_pb2.GripperCommand()
-                finger = gripper_command.gripper.finger.add()
-                gripper_command.mode = Base_pb2.GRIPPER_POSITION
-                finger.finger_identifier = 1
-                finger.value = gripper_goal
-
-                self.kortex.SendGripperCommand(gripper_command)
-                self._curr_gripper_goal = gripper_goal
+            self.kortex.SendGripperCommand(gripper_command)
+            self._curr_gripper_goal = gripper_goal
 
     def _publish_admittance(self, actions: np.ndarray, action_spec: ActionSpec) -> None:
         """Set the arm to a new admittance mode."""
@@ -260,13 +238,10 @@ class Gen3KortexEnv(KortexEnv):
             self._adm_mode = KortexAdmittanceMode.NULLSPACE
         else:
             self._adm_mode = KortexAdmittanceMode.NONE
-        if self.cfg.use_udp:
-            pass
-        else:  # Compute admittance over TCP
-            if old_adm_mode != self._adm_mode:
-                adm = Base_pb2.Admittance()
-                adm.admittance_mode = self._adm_mode
-                self.kortex.SetAdmittance(adm)
+        if old_adm_mode != self._adm_mode:
+            adm = Base_pb2.Admittance()
+            adm.admittance_mode = self._adm_mode
+            self.kortex.SetAdmittance(adm)
 
     def _publish_joint_vel_spec(self, joint_vel: np.ndarray, duration: float = 20) -> None:
         """Publish a joint velocity commmand to the kortex API.
@@ -276,17 +251,14 @@ class Gen3KortexEnv(KortexEnv):
             duration: Max duration of trajectory
 
         """
-        if self.cfg.use_udp:
-            pass
-        else:
-            command = Base_pb2.JointSpeeds()
-            for i, j in enumerate(np.rad2deg(joint_vel[:-1])):  # Publish all except gripper
-                joint_speed = command.joint_speeds.add()
-                joint_speed.joint_identifier = i
-                joint_speed.value = j
-                joint_speed.duration = 0
+        command = Base_pb2.JointSpeeds()
+        for i, j in enumerate(np.rad2deg(joint_vel[:-1])):  # Publish all except gripper
+            joint_speed = command.joint_speeds.add()
+            joint_speed.joint_identifier = i
+            joint_speed.value = j
+            joint_speed.duration = 0
 
-            self.kortex.SendJointSpeedsCommand(command)
+        self.kortex.SendJointSpeedsCommand(command)
 
     def _publish_twist_tcp_spec(self, twist: np.ndarray) -> None:
         """Publish a twist in the tcp frame to the robot twist controller.
@@ -295,21 +267,18 @@ class Gen3KortexEnv(KortexEnv):
             twist: Cartesian twist command (velocity) in XYZ (linear) and RPY (angular).
 
         """
-        if self.cfg.use_udp:
-            pass
-        else:
-            command = Base_pb2.TwistCommand()
+        command = Base_pb2.TwistCommand()
 
-            command.reference_frame = Base_pb2.CARTESIAN_REFERENCE_FRAME_TOOL
-            command.duration = 1  # must be int type
-            twist_cmd = command.twist
-            twist_cmd.linear_x = twist[0]
-            twist_cmd.linear_y = twist[1]
-            twist_cmd.linear_z = twist[2]
-            twist_cmd.angular_x = twist[3]
-            twist_cmd.angular_y = twist[4]
-            twist_cmd.angular_z = twist[5]
-            self.kortex.SendTwistCommand(command)
+        command.reference_frame = Base_pb2.CARTESIAN_REFERENCE_FRAME_TOOL
+        command.duration = 1  # must be int type
+        twist_cmd = command.twist
+        twist_cmd.linear_x = twist[0]
+        twist_cmd.linear_y = twist[1]
+        twist_cmd.linear_z = twist[2]
+        twist_cmd.angular_x = twist[3]
+        twist_cmd.angular_y = twist[4]
+        twist_cmd.angular_z = twist[5]
+        self.kortex.SendTwistCommand(command)
 
     def _publish_tcp_cart_spec(self, tcp_cart: np.ndarray, duration: float = 5) -> None:
         """Publish a TCP cartesian trajectory to the kortex API.
@@ -319,8 +288,6 @@ class Gen3KortexEnv(KortexEnv):
             duration: Max duration of trajectory
 
         """
-        if self.cfg.use_udp:
-            self.switch_controllers(Base_pb2.SINGLE_LEVEL_SERVOING)
         action = Base_pb2.Action()
         action.name = "TCP Cartesian Action"
         action.application_data = ""
@@ -348,8 +315,7 @@ class Gen3KortexEnv(KortexEnv):
 
             self._new_motion_goal = True
             self._motion_goal_start = time.perf_counter()
-            if self.cfg.use_udp:
-                self.switch_controllers(Base_pb2.LOW_LEVEL_SERVOING)  # TODO Check if needed
+
         elif (time.perf_counter() - self._motion_goal_start) < duration and not self._motion_event.is_set():
             self._new_motion_goal = True
         else:
