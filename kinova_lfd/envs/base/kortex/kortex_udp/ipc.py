@@ -6,6 +6,7 @@ Packets are little-endian and packed. Sizes are asserted against cpp/ipc.hpp.
 from __future__ import annotations
 
 import struct
+import time
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -13,11 +14,11 @@ MAGIC = 0x4B555044
 ARM_DOFS = 7
 TWIST_DOFS = 6
 
-_COMMAND = struct.Struct("<IIII7ff6ff")
+_COMMAND = struct.Struct("<IIII7ff6ffQ")
 _CONTROL = struct.Struct("<IIIII")
 _FEEDBACK = struct.Struct("<IIII18f21f3fIII")
 
-assert _COMMAND.size == 76
+assert _COMMAND.size == 84
 assert _CONTROL.size == 20
 assert _FEEDBACK.size == 196
 
@@ -86,11 +87,17 @@ def pack_command(
         twist: Six tool-frame values, linear m/s then angular deg/s.
         duration_s: Requested joint-trajectory duration. Ignored for twists.
 
+    The packet carries the host monotonic time in microseconds. Repeating an
+    identical twist still advances that stamp, which is what keeps the servo alive.
+
     """
     if len(joints_rad) != ARM_DOFS:
         raise ValueError(f"expected {ARM_DOFS} joint positions, got {len(joints_rad)}")
     if len(twist) != TWIST_DOFS:
         raise ValueError(f"expected {TWIST_DOFS} twist values, got {len(twist)}")
+    stamp_us = time.monotonic_ns() // 1000
+    if stamp_us == 0:
+        stamp_us = 1
     return _COMMAND.pack(
         MAGIC,
         int(PacketType.COMMAND),
@@ -100,6 +107,7 @@ def pack_command(
         float(gripper),
         *twist,
         float(duration_s),
+        stamp_us,
     )
 
 

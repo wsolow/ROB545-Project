@@ -42,7 +42,7 @@ def main() -> None:
 
     Defaults to Kortex-Gen3-v0 environment and passes the twist_tcp Action Specification.
     """
-    env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "dt": 1 / 20, "dry_run": True}
+    env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "dt": 1 / 20, "dry_run": False}
 
     env = create_env(args_cli.task, env_cfg)
 

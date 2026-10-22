@@ -13,10 +13,10 @@ struct ServoConfig {
     std::string command_in_type = "speed_units";
     double scale_linear = 0.9;
     double scale_rotational = 1.5;
-    double low_pass_filter_coeff = 2.0;
+    double low_pass_filter_coeff = 40.0;
     std::string ee_frame_name = "gen3_tool_frame";
     bool command_in_ee_frame = true;
-    double incoming_command_timeout = 0.1;
+    double incoming_command_timeout = 0.5;
     double lower_singularity_threshold = 17.0;
     double hard_stop_singularity_threshold = 30.0;
     std::array<double, 7> joint_limit_margins{0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1};

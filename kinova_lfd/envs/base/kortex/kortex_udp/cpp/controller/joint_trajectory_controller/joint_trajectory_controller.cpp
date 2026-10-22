@@ -9,10 +9,50 @@
 namespace kinova_lfd {
 namespace {
 
-constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
-constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kTwoPi = 2.0 * kPi;
+constexpr double kRadToDeg = 180.0 / kPi;
+constexpr double kDegToRad = kPi / 180.0;
 constexpr double kGoalTolerance = 1e-4;
 constexpr double kMinMove = 1e-6;
+// Two cascaded low-passes on the sampled joint position. Each stage has time
+// constant τ = (1 + coeff) ms. One stage would step the acceleration. The
+// second stage starts and ends that acceleration at zero.
+constexpr double kPositionFilterCoeff = 40.0;
+
+// Kinova cyclic positions are absolute degrees and are often a full turn away from
+// the URDF interval. Return the copy of angle that lands inside [lower, upper].
+bool CopyInsideLimits(double angle, double lower, double upper, double* canonical) {
+    const double mid = 0.5 * (lower + upper);
+    const double turns = std::round((mid - angle) / kTwoPi);
+    const double candidate = angle + turns * kTwoPi;
+    if (candidate < lower - 1e-6 || candidate > upper + 1e-6) {
+        return false;
+    }
+    *canonical = candidate;
+    return true;
+}
+
+// Actuator command for this goal. Whole turns of the measured pose stay put, and
+// the value sent to the arm stays on the turn Kinova is reporting.
+double GoalOnMeasuredTurn(
+    int joint_index, double goal, double measured, bool has_limit, double lower, double upper) {
+    if (!has_limit) {
+        const double turns = std::round((measured - goal) / kTwoPi);
+        return goal + turns * kTwoPi;
+    }
+    double measured_canonical = measured;
+    const bool measured_inside = CopyInsideLimits(measured, lower, upper, &measured_canonical);
+    double goal_canonical = goal;
+    if (!CopyInsideLimits(goal, lower, upper, &goal_canonical)) {
+        const double clamped = std::clamp(goal, lower, upper);
+        std::cerr << "[kortex_udp] joint " << (joint_index + 1) << " goal " << goal
+                  << " rad is outside [" << lower << ", " << upper << "], using " << clamped << "\n";
+        goal_canonical = clamped;
+    }
+    const double turn = measured_inside ? measured - measured_canonical : 0.0;
+    return goal_canonical + turn;
+}
 
 // Kinova's Gen3 joint_limits.yaml. The URDF has no acceleration field.
 constexpr std::array<double, kArmDofs> kMaxAcceleration = {1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 10.0};
@@ -31,10 +71,13 @@ JointTrajectoryController::JointTrajectoryController(std::string urdf_path) : mo
 
 void JointTrajectoryController::Reset(const RobotState& /*state*/) {
     active_ = false;
+    have_command_ = false;
     elapsed_ = 0.0;
     segment_ = Segment{};
     command_goal_.fill(0.0);
     command_duration_ = 0.0;
+    filter_stage1_rad_.fill(0.0);
+    filter_stage2_rad_.fill(0.0);
 }
 
 bool JointTrajectoryController::SameCommand(const ipc::CommandPacket& command) const {
@@ -50,24 +93,25 @@ bool JointTrajectoryController::SameCommand(const ipc::CommandPacket& command) c
 }
 
 void JointTrajectoryController::Plan(const ipc::CommandPacket& command, const RobotState& state) {
-    const auto start = MeasuredRadians(state);
+    const auto measured = MeasuredRadians(state);
+    if (!have_command_) {
+        filter_stage1_rad_ = measured;
+        filter_stage2_rad_ = measured;
+        have_command_ = true;
+    }
+    // Continue from the position last sent. The measured pose can still be the
+    // pre-motion reading, and planning from it pulls the arm backward.
+    const auto& start = filter_stage2_rad_;
     const auto& limits = model_.limits();
     std::array<double, kArmDofs> goal{};
     for (int i = 0; i < kArmDofs; ++i) {
         const size_t index = static_cast<size_t>(i);
         command_goal_[index] = static_cast<double>(command.joints[i]);
         goal[index] = command_goal_[index];
-        if (!limits.has_position_limit[index]) {
-            continue;
-        }
         const double lower = limits.lower_rad[index];
         const double upper = limits.upper_rad[index];
-        if (goal[index] < lower || goal[index] > upper) {
-            const double clamped = std::clamp(goal[index], lower, upper);
-            std::cerr << "[kortex_udp] joint " << (i + 1) << " goal " << goal[index]
-                      << " rad is outside [" << lower << ", " << upper << "], using " << clamped << "\n";
-            goal[index] = clamped;
-        }
+        goal[index] = GoalOnMeasuredTurn(
+            i, goal[index], start[index], limits.has_position_limit[index], lower, upper);
     }
     command_duration_ = static_cast<double>(command.duration_s);
 
@@ -149,11 +193,18 @@ double JointTrajectoryController::Progress(double t_s) const {
     return std::min(1.0, coast + cruise * t_decel - 0.5 * accel * t_decel * t_decel);
 }
 
-void JointTrajectoryController::Write(double progress, ActuatorTargets& out) const {
+void JointTrajectoryController::Write(double progress, double dt_s, ActuatorTargets& out) {
+    const double dt = dt_s > 1e-6 ? dt_s : 1e-3;
+    const double blend = 1.0 / (1.0 + std::max(0.0, kPositionFilterCoeff));
     for (int i = 0; i < kArmDofs; ++i) {
         const size_t index = static_cast<size_t>(i);
-        const double q = segment_.start_rad[index] + segment_.delta_rad[index] * progress;
-        out.position_deg[index] = static_cast<float>(q * kRadToDeg);
+        const double target = segment_.start_rad[index] + segment_.delta_rad[index] * progress;
+        const double previous = filter_stage2_rad_[index];
+        filter_stage1_rad_[index] += blend * (target - filter_stage1_rad_[index]);
+        filter_stage2_rad_[index] += blend * (filter_stage1_rad_[index] - filter_stage2_rad_[index]);
+        out.position_deg[index] = static_cast<float>(filter_stage2_rad_[index] * kRadToDeg);
+        out.velocity_deg_s[index] =
+            static_cast<float>((filter_stage2_rad_[index] - previous) / dt * kRadToDeg);
     }
 }
 
@@ -171,7 +222,7 @@ void JointTrajectoryController::Compute(
     } else {
         elapsed_ += std::max(0.0, dt_s);
     }
-    Write(Progress(elapsed_), out);
+    Write(Progress(elapsed_), dt_s, out);
 }
 
 }  // namespace kinova_lfd

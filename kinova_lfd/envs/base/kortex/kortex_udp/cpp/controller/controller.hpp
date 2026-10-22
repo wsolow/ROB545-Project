@@ -1,6 +1,6 @@
 // Base types for the 1 kHz arm controllers.
 //
-// Compute writes seven actuator position commands in degrees. It must not block
+// Compute writes seven actuator commands in degrees and deg/s. It must not block
 // and it must not talk to the robot. The gripper is applied by the cyclic loop.
 
 #ifndef KINOVA_LFD_KORTEX_UDP_CONTROLLER_HPP
@@ -29,6 +29,10 @@ struct RobotState {
 
 struct ActuatorTargets {
     std::array<float, ipc::kArmDofs> position_deg{};
+    // Feedforward for the low-level cyclic command. Zero tells each actuator to
+    // brake while the position setpoint is still moving, which jerks the arm
+    // along an otherwise smooth trajectory.
+    std::array<float, ipc::kArmDofs> velocity_deg_s{};
 };
 
 class Controller {

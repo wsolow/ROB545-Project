@@ -47,6 +47,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -317,6 +318,33 @@ class CyclicRobot {
 };
 
 constexpr std::array<double, kArmDofs> kReadyRad = {0.0, 0.26, 3.14, -2.27, 0.0, 0.96, 1.57};
+// Shoulder sag measured while a 0.01 twist was streamed and the position target
+// stayed on the feedback. Joint 2 advanced about 0.25 deg/s and the tool dropped.
+constexpr int kDryRunSagJoint = 1;
+constexpr double kDryRunSagRadS = 0.25 * M_PI / 180.0;
+constexpr double kDryRunTrackDeadbandRad = 0.05 * M_PI / 180.0;
+
+std::array<double, kArmDofs> DryRunInitialRad() {
+    const char* text = std::getenv("KORTEX_UDP_DRY_RUN_JOINTS_DEG");
+    if (text == nullptr || text[0] == '\0') {
+        return kReadyRad;
+    }
+    std::array<double, kArmDofs> q = kReadyRad;
+    std::stringstream stream(text);
+    std::string item;
+    int count = 0;
+    while (std::getline(stream, item, ',')) {
+        if (count >= kArmDofs) {
+            throw std::runtime_error("KORTEX_UDP_DRY_RUN_JOINTS_DEG has more than 7 values");
+        }
+        const double degrees = std::stod(item);
+        q[static_cast<size_t>(count++)] = degrees * M_PI / 180.0;
+    }
+    if (count != kArmDofs) {
+        throw std::runtime_error("KORTEX_UDP_DRY_RUN_JOINTS_DEG must contain 7 comma-separated degrees");
+    }
+    return q;
+}
 
 void WriteArmSample(const ArmSample& sample, RobotState& state) {
     for (int i = 0; i < kArmDofs; ++i) {
@@ -335,8 +363,9 @@ void WriteArmSample(const ArmSample& sample, RobotState& state) {
 
 class DryRunRobot : public CyclicRobot {
  public:
-    explicit DryRunRobot(const std::string& urdf_path) : model_(urdf_path) {
-        model_.reset(kReadyRad);
+    explicit DryRunRobot(const std::string& urdf_path)
+        : model_(urdf_path), sag_(std::getenv("KORTEX_UDP_DRY_RUN_SAG") != nullptr) {
+        model_.reset(DryRunInitialRad());
         WriteArmSample(model_.current(), state_);
     }
 
@@ -346,6 +375,34 @@ class DryRunRobot : public CyclicRobot {
         std::array<double, kArmDofs> q_cmd{};
         for (int i = 0; i < kArmDofs; ++i) {
             q_cmd[static_cast<size_t>(i)] = static_cast<double>(arm.position_deg[static_cast<size_t>(i)]) * M_PI / 180.0;
+        }
+        if (sag_) {
+            // A target glued to the feedback never leaves the deadband, so the
+            // shoulder sags. A target that has moved far enough is tracked.
+            const auto held = model_.current().q_rad;
+            for (int i = 0; i < kArmDofs; ++i) {
+                const size_t index = static_cast<size_t>(i);
+                const double error = q_cmd[index] - held[index];
+                if (std::fabs(error) < kDryRunTrackDeadbandRad) {
+                    q_cmd[index] = held[index];
+                    if (i == kDryRunSagJoint) {
+                        q_cmd[index] += kDryRunSagRadS * 0.001;
+                    }
+                }
+            }
+        }
+        double lag_s = 0.0;
+        const char* lag_text = std::getenv("KORTEX_UDP_DRY_RUN_LAG_S");
+        if (lag_text != nullptr && lag_text[0] != '\0') {
+            lag_s = std::max(0.0, std::atof(lag_text));
+        }
+        if (lag_s > 1e-6) {
+            const auto held = model_.current().q_rad;
+            const double alpha = 1.0 - std::exp(-0.001 / lag_s);
+            for (int i = 0; i < kArmDofs; ++i) {
+                const size_t index = static_cast<size_t>(i);
+                q_cmd[index] = held[index] + alpha * (q_cmd[index] - held[index]);
+            }
         }
         WriteArmSample(model_.integrateToward(q_cmd, 0.001), state_);
 
@@ -364,6 +421,7 @@ class DryRunRobot : public CyclicRobot {
  private:
     Gen3Model model_;
     RobotState state_{};
+    bool sag_ = false;
 };
 
 class KortexRobot : public CyclicRobot {
@@ -444,7 +502,10 @@ class KortexRobot : public CyclicRobot {
         for (int i = 0; i < actuator_count_; ++i) {
             auto* actuator = base_command_.mutable_actuators(i);
             actuator->set_position(arm.position_deg[static_cast<size_t>(i)]);
-            actuator->set_velocity(0.f);
+            // Position is already the 1 kHz interpolated setpoint. Velocity is the
+            // matching feedforward in deg/s. Leaving it at zero makes the actuator
+            // brake against every step of that trajectory.
+            actuator->set_velocity(arm.velocity_deg_s[static_cast<size_t>(i)]);
             actuator->set_torque_joint(0.f);
         }
         gripper_motor_->set_position(gripper.position_percent);

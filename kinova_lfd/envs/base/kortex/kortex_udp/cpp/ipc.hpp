@@ -39,6 +39,8 @@ inline constexpr uint32_t kFlagLowLevel = 1u;
 
 // Joints are radians. Gripper is [0, 1]. Twist is tool-frame linear m/s and angular deg/s,
 // matching Kortex SendTwistCommand. duration_s is the requested joint-trajectory time.
+// stamp_us is the host monotonic clock at send time, in microseconds. A held key
+// repeats the same twist with a new stamp. The twist watchdog uses that stamp.
 struct CommandPacket {
     uint32_t magic;
     uint32_t type;
@@ -48,6 +50,7 @@ struct CommandPacket {
     float gripper;
     float twist[kTwistDofs];
     float duration_s;
+    uint64_t stamp_us;
 };
 
 struct ControlPacket {
@@ -84,7 +87,7 @@ struct FeedbackPacket {
 
 #pragma pack(pop)
 
-static_assert(sizeof(CommandPacket) == 76, "CommandPacket size drifted from ipc.py");
+static_assert(sizeof(CommandPacket) == 84, "CommandPacket size drifted from ipc.py");
 static_assert(sizeof(ControlPacket) == 20, "ControlPacket size drifted from ipc.py");
 static_assert(sizeof(FeedbackPacket) == 196, "FeedbackPacket size drifted from ipc.py");
 

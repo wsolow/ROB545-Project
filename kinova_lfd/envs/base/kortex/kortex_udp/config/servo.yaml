@@ -37,7 +37,12 @@ publish_joint_velocities: false
 publish_joint_accelerations: false
 
 ## Incoming Joint State properties
-low_pass_filter_coeff: 2.0  # Larger --> trust the filtered data more, trust the measurements less.
+# Two cascaded low-passes on the joint step. Speed starts at zero and
+# acceleration rises, instead of stepping when a twist arrives.
+# Each stage has time constant τ = (1 + coeff) * 1 ms. Raise coeff for a
+# longer ramp. 40 is about 40 ms per stage, near full speed in about 0.2 s.
+# 2 is about 3 ms per stage and the arm jerks at the start of a command.
+low_pass_filter_coeff: 40.0
 
 ## MoveIt properties
 move_group_name:  manipulator  # Often 'manipulator' or 'arm'
@@ -48,7 +53,10 @@ ee_frame_name: gen3_tool_frame  # Tool frame in gen3_2f85.urdf. Commands are exp
 robot_link_command_frame:  base_link  # commands must be given in the frame of a robot link. Usually either the base or end effector
 
 ## Stopping behaviour
-incoming_command_timeout:  0.1  # Stop servoing if X seconds elapse without a new command
+# Keyboard teleop resends the same twist at 20 Hz. Each packet has a new host
+# stamp, and that stamp resets this timer. The arm coasts only after stamps stop.
+# Releasing the key sends a zero twist on the next step.
+incoming_command_timeout:  0.5  # Stop servoing if X seconds elapse without a new command
 # If 0, republish commands forever even if the robot is stationary. Otherwise, specify num. to publish.
 # Important because ROS may drop some messages and we need the robot to halt reliably.
 num_outgoing_halt_msgs_to_publish: 4

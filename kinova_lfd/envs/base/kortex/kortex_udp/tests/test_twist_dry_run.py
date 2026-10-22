@@ -7,10 +7,13 @@ motion, and checks that a dropped command stream stops the arm.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 from kinova_lfd.envs.base.kortex.kortex_udp.kortex_udp_bridge import KortexUDPBridge
 
@@ -127,22 +130,59 @@ def main() -> None:
         if x_delta[0] < 8.0 or abs(x_delta[0]) <= max(abs(x_delta[1]), abs(x_delta[2])):
             failures.append(f"tool +X motion was {x_delta} mm, expected dominant +X")
 
+        # The same twist values, resent the way a held keyboard key is. The host
+        # stamp must keep this alive past incoming_command_timeout.
+        held_samples = _run_segment(
+            bridge,
+            "held twist",
+            "repeating the same twist for longer than the timeout keeps the tool moving",
+            1.20,
+            lambda: send_twist(plus_x),
+            plus_x,
+        )
+        held_early = [sample for sample in held_samples if sample[0] >= 0.60]
+        held_late = [sample for sample in held_samples if sample[0] >= 1.05]
+        if held_early and held_late:
+            held_mm = float(held_late[0][1][0] - held_early[0][1][0])
+            if held_mm < 10.0:
+                failures.append(f"held twist moved {held_mm:.2f} mm after 0.6 s, expected it to stay live")
+        else:
+            failures.append("held twist segment did not collect the post-timeout window")
+
         pause = np.zeros(6)
         pause_samples = _run_segment(
             bridge,
             "command timeout",
-            "arm keeps the last twist for about 0.1 s, then holds",
-            0.45,
+            "arm keeps the last twist for about 0.5 s, then coasts to a stop",
+            1.15,
             None,
             pause,
         )
-        held = [sample for sample in pause_samples if sample[0] >= 0.25]
+        # A 20 Hz teleop step is 50 ms. Motion through this window means a late
+        # poll no longer expires the twist.
+        moving = [sample for sample in pause_samples if sample[0] >= 0.12]
+        still_moving = [sample for sample in pause_samples if sample[0] >= 0.40]
+        if moving and still_moving:
+            held_mm = float(still_moving[0][1][0] - moving[0][1][0])
+            if held_mm < 8.0:
+                failures.append(f"tool moved {held_mm:.2f} mm before the timeout, expected the twist to stay live")
+        else:
+            failures.append("timeout segment did not collect the live-command window")
+        early = [sample for sample in pause_samples if sample[0] >= 0.52]
+        later = [sample for sample in pause_samples if sample[0] >= 0.70]
+        if early and later:
+            coast_mm = float(later[0][1][0] - early[0][1][0])
+            if coast_mm < 1.0:
+                failures.append(f"tool coasted {coast_mm:.2f} mm after the timeout, expected a ramp down")
+        else:
+            failures.append("timeout segment did not collect the coast window")
+        held = [sample for sample in pause_samples if sample[0] >= 0.95]
         if len(held) >= 2:
             drift = np.max(np.abs(held[-1][2] - held[0][2]))
             if drift > 0.05:
-                failures.append(f"joints drifted {drift:.3f} deg after the command timeout")
+                failures.append(f"joints drifted {drift:.3f} deg after the coast")
         else:
-            failures.append("timeout segment did not collect samples after 0.25 s")
+            failures.append("timeout segment did not collect samples after 0.95 s")
 
         plus_z = np.array([0.0, 0.0, 0.04, 0.0, 0.0, 0.0])
         z_samples = _run_segment(

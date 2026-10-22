@@ -7,7 +7,7 @@
 #
 #   cmake -S kinova_lfd/envs/base/kortex/kortex_udp/cpp \
 #       -B kinova_lfd/envs/base/kortex/kortex_udp/cpp/build \
-#       -DKORTEX_DIR=/path/to/kortex_api \
+#       -DKORTEX_DIR="$PWD/kinova_lfd/envs/base/kortex/kortex_cpp_api" \
 #       -DPINOCCHIO_DIR=/usr/local
 #   cmake --build kinova_lfd/envs/base/kortex/kortex_udp/cpp/build
 

@@ -10,20 +10,21 @@ After installing the above project dependencies, try running
 ```scripts/mj_teleop.py```
 
 To view the wirst and tabletop camera run which will bring up cv2 windows:
-```scripts/mj_teleop.py --wrist_camera --tabletop_camera
+```scripts/mj_teleop.py --wrist_camera --tabletop_camera```
 
 On the first run, this should take a few minutes to configure the CUDA kernel with Mujoco Warp. After that a window should pop up (see window.png for example) with the kinova arm. If you press "k" you should see the gripper open and close.
 
-# Kortex UDP bridge
+# Kortex UDP bridge with C++ bindings
 
-The 1 kHz UDP bridge is a separate C++ program. `pip install` does not compile it, and the build does not use ROS 2. Install Eigen, Boost, and urdfdom from apt, build Pinocchio 3 from source, and point CMake at the Kinova Kortex C++ API.
+To do real-time control at 1kHz, it is recommended to use C++ as the Python3 API cannot run sufficiently fast. To avoid using ROS2, we install the Kinova Kortex C++ API below
 
+1. Install essential build requirements
 ```bash
 sudo apt update
 sudo apt install build-essential cmake git libeigen3-dev libboost-all-dev liburdfdom-dev libconsole-bridge-dev
 ```
 
-Pinocchio 4 is the C++ kinematics library. Build it with the Python bindings and collision support turned off so the install does not pull EigenPy or Coal:
+2. Clone and install Pinocchio for fast FK/IK computation 
 
 ```bash
 git clone --recursive https://github.com/stack-of-tasks/pinocchio.git
@@ -38,16 +39,24 @@ cmake .. \
     -DBUILD_TESTING=OFF
 cmake --build . -j
 sudo cmake --install .
+cd ../..
 ```
 
-`KORTEX_DIR` is the extracted Kortex C++ API. That directory contains `include/` and `lib/release/libKortexApiCpp.a`. From the repository root:
+3. Download and extract the Kinova Kortex C++ API:
+```bash
+mkdir -p kinova_lfd/envs/base/kortex/kortex_cpp_api
+curl -L --fail -o /tmp/kortex_api_cpp_2.6.0_linux_x86_64.zip \
+    https://artifactory.kinovaapps.com/artifactory/generic-public/kortex/API/2.6.0/linux_x86_64_gcc_5.4.zip
+unzip -q -o /tmp/kortex_api_cpp_2.6.0_linux_x86_64.zip \
+    -d kinova_lfd/envs/base/kortex/kortex_cpp_api
+```
+
+4. Compile the Kinova UDP Bridge in C++
 
 ```bash
 cmake -S kinova_lfd/envs/base/kortex/kortex_udp/cpp \
     -B kinova_lfd/envs/base/kortex/kortex_udp/cpp/build \
-    -DKORTEX_DIR=/path/to/kortex_api \
+    -DKORTEX_DIR="$PWD/kinova_lfd/envs/base/kortex/kortex_cpp_api" \
     -DPINOCCHIO_DIR=/usr/local
 cmake --build kinova_lfd/envs/base/kortex/kortex_udp/cpp/build
 ```
-
-The executable is `kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/kortex_udp_bridge`. The `cpp/build` directory is generated and is not part of the git repository. If Pinocchio is installed in `/usr` or `/usr/local`, `-DPINOCCHIO_DIR` can be omitted. 

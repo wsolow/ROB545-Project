@@ -7,10 +7,12 @@ commands at 1 kHz. This script prints that motion and checks the limits.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import TYPE_CHECKING
 
 import numpy as np
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 from kinova_lfd.envs.base.kortex.kortex_udp.kortex_udp_bridge import KortexUDPBridge
 
@@ -104,6 +106,29 @@ def _follow(
     return samples, max_velocity, max_acceleration
 
 
+def _peak_accel(
+    samples: list[tuple[float, np.ndarray, np.ndarray]],
+    t0: float,
+    t1: float,
+) -> np.ndarray:
+    """Largest |dv/dt| on each joint for samples inside [t0, t1]."""
+    peak = np.zeros(7)
+    previous: tuple[float, np.ndarray] | None = None
+    for stamp, _joints, velocity in samples:
+        if previous is not None and t0 <= stamp <= t1 and stamp - previous[0] >= 0.005:
+            peak = np.maximum(peak, np.abs(velocity - previous[1]) / (stamp - previous[0]))
+            previous = (stamp, velocity)
+        elif previous is None or stamp - previous[0] >= 0.005:
+            previous = (stamp, velocity)
+    return peak
+
+
+def _backward_rad(samples: list[tuple[float, np.ndarray, np.ndarray]], joint: int) -> float:
+    """How far a joint moved back from the farthest point it had reached."""
+    position = np.array([sample[1][joint] for sample in samples])
+    return float(np.max(np.maximum.accumulate(position) - position))
+
+
 def _arrival(samples: Sequence[tuple[float, np.ndarray, np.ndarray]], start: np.ndarray, goal: np.ndarray) -> float:
     """First time every moving joint has completed 95 percent of its travel."""
     for stamp, joints, _velocity in samples:
@@ -143,6 +168,16 @@ def main() -> None:
         end_error = np.rad2deg(np.max(np.abs(samples[-1][1] - goal)))
         if end_error > 0.5:
             failures.append(f"shared move finished {end_error:.2f} deg from the goal")
+        early_accel = _peak_accel(samples, 0.0, 0.04)
+        for joint in (0, 1):
+            if peak_acceleration[joint] > 0.2 and early_accel[joint] > 0.55 * peak_acceleration[joint]:
+                failures.append(
+                    f"joint {joint + 1} acceleration in the first 40 ms was {early_accel[joint]:.2f} "
+                    f"rad/s^2, {early_accel[joint] / peak_acceleration[joint]:.0%} of the peak"
+                )
+            backward = _backward_rad(samples, joint)
+            if backward > 0.002:
+                failures.append(f"joint {joint + 1} snapped back {np.rad2deg(backward):.2f} deg")
 
         start = _joints_rad(bridge.latest_feedback())
         short_goal = start.copy()
@@ -173,6 +208,44 @@ def main() -> None:
         print(f"limit acceleration rad/s^2 {_fmt(_MAX_ACCELERATION, 3)}")
     finally:
         bridge.close()
+
+    os.environ["KORTEX_UDP_DRY_RUN_LAG_S"] = "0.08"
+    lagged = KortexUDPBridge("192.168.1.10", dry_run=True)
+    try:
+        lagged.start()
+        start = _joints_rad(lagged.latest_feedback())
+        goal = start.copy()
+        goal[1] += 0.80
+        print("\n== replan while feedback lags ==")
+        print("expected: a second packet continues forward instead of jumping back to the measurement")
+        opened = time.monotonic()
+        next_send = opened
+        samples: list[tuple[float, float]] = []
+        while True:
+            now = time.monotonic()
+            elapsed = now - opened
+            if elapsed >= 0.9:
+                break
+            if now >= next_send:
+                duration = 2.5 if elapsed < 0.45 else 2.51
+                lagged.kortex.send_joint_position(goal, _GRIPPER, duration)
+                next_send += _DT
+            samples.append((elapsed, float(_joints_rad(lagged.latest_feedback())[1])))
+            time.sleep(0.002)
+        before = np.array([position for stamp, position in samples if stamp < 0.45])
+        after = np.array([position for stamp, position in samples if stamp >= 0.45])
+        if before.size == 0 or after.size == 0:
+            failures.append("lagged replan did not collect samples")
+        else:
+            retreat = float(np.max(before) - np.min(after))
+            print(f"joint 2 retreat after replan {np.rad2deg(retreat):.3f} deg")
+            if retreat > 0.15:
+                failures.append(
+                    f"joint 2 jumped back {np.rad2deg(retreat):.2f} deg when the goal was sent again"
+                )
+    finally:
+        lagged.close()
+        os.environ.pop("KORTEX_UDP_DRY_RUN_LAG_S", None)
 
     if failures:
         print("\nFAIL")
