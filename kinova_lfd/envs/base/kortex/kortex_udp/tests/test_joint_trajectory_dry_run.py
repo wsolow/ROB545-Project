@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING
 
 import numpy as np
+
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 from kinova_lfd.envs.base.kortex.kortex_udp.kortex_udp_bridge import KortexUDPBridge
@@ -240,9 +241,7 @@ def main() -> None:
             retreat = float(np.max(before) - np.min(after))
             print(f"joint 2 retreat after replan {np.rad2deg(retreat):.3f} deg")
             if retreat > 0.15:
-                failures.append(
-                    f"joint 2 jumped back {np.rad2deg(retreat):.2f} deg when the goal was sent again"
-                )
+                failures.append(f"joint 2 jumped back {np.rad2deg(retreat):.2f} deg when the goal was sent again")
     finally:
         lagged.close()
         os.environ.pop("KORTEX_UDP_DRY_RUN_LAG_S", None)

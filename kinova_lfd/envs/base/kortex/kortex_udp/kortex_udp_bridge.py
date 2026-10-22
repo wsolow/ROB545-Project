@@ -198,7 +198,7 @@ class KortexUDPBridge:
             raise FileNotFoundError(
                 "Kortex UDP bridge is not built at "
                 f"{self.binary}. Build instructions are in the top-level README "
-                "under \"Kortex UDP bridge\"."
+                'under "Kortex UDP bridge".'
             )
 
         self._fb_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

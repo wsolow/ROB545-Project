@@ -5,3 +5,4 @@ kinova_lfd/envs/base/kortex/kortex_cpp_api/
 
 **build/
 **pinocchio/
+*.npz

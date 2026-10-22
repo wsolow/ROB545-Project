@@ -58,8 +58,7 @@ def main() -> None:
                 f"joint delta deg {_fmt(joint_delta, 3)}"
             )
             print(
-                f"  real robot was joint 2 {_REAL_JOINT2_DEG[name]:+.3f} deg and "
-                f"tool z {_REAL_DZ_MM[name]:+.2f} mm"
+                f"  real robot was joint 2 {_REAL_JOINT2_DEG[name]:+.3f} deg and " f"tool z {_REAL_DZ_MM[name]:+.2f} mm"
             )
             if world_mm[2] < -1.0:
                 failures.append(f"{name} world z dropped {world_mm[2]:.2f} mm")
