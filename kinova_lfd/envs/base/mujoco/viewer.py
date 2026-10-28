@@ -109,6 +109,7 @@ class MjViewer(NativeMujocoViewer):
                     action_spec = ActionSpec.TWIST_TCP
                 else:
                     actions = self.policy(obs)
+                    action_spec = ActionSpec.TWIST_TCP
             else:
                 actions = torch.zeros(self.env.action_space.shape, device=self.env.device)
                 action_spec = ActionSpec.JOINTS_POS
