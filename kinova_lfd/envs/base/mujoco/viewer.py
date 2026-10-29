@@ -32,12 +32,14 @@ class MjViewer(NativeMujocoViewer):
         verbosity: VerbosityLevel = VerbosityLevel.SILENT,
         view_wrist: bool = True,
         view_tabletop: bool = True,
+        ignore_mjlab_keys: bool = False,
     ):
         super().__init__(env, policy, frame_rate, key_callback, plot_cfg, enable_perturbations, verbosity)
         if isinstance(self.policy, DeviceBase):
             self.policy.start()
         self._view_wrist = view_wrist
         self._view_tabletop = view_tabletop
+        self._ignore_mjlab_keys = ignore_mjlab_keys
         self._rgbd_wrist = None
         self._rgbd_table = None
 
@@ -82,6 +84,10 @@ class MjViewer(NativeMujocoViewer):
 
     @override
     def _safe_key_callback(self, key: int) -> None:
+        # During recording, skip mjlab Enter/P/Space/etc. so they do not reset
+        # or toggle plots. Simulate built-in letter hotkeys still cannot be suppressed.
+        if self._ignore_mjlab_keys:
+            return
         # A and R move the arm. The base viewer also binds them to debug toggles.
         if isinstance(self.policy, DeviceBase) and key in (KEY_A, KEY_R):
             return

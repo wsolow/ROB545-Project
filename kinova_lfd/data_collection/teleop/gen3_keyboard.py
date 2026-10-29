@@ -1,4 +1,4 @@
-"""Gen3 keyboard teleoperator emitting TWIST_TCP actions (no LeRobot key conflicts)."""
+"""Gen3 keyboard teleoperator emitting TWIST_TCP actions (WASD laptop layout)."""
 
 from __future__ import annotations
 
@@ -30,10 +30,11 @@ TWIST_KEYS = ("tcp.vx", "tcp.vy", "tcp.vz", "tcp.wx", "tcp.wy", "tcp.wz", "gripp
 
 
 class Gen3KeyboardTeleop(Teleoperator):
-    """SE(3) keyboard teleop for Gen3 using letter keys (I/J/K/L/U/O + rotations).
+    """SE(3) keyboard teleop for Gen3 using a laptop WASD layout.
 
-    Motion layout matches Kinova ``Se3Keyboard`` so it does not fight episode
-    controls on ``[`` / ``]`` / Esc.
+    Translation: W/S X, A/D Y, Q/E Z. Rotation: I/K roll, J/L pitch, U/O yaw.
+    Gripper: P. Episode controls are owned by ``init_gen3_recording_listener``
+    (``[`` / ``]`` / Esc). Assumes the MuJoCo Simulate window is not focused.
     """
 
     config_class = Gen3KeyboardTeleopConfig
@@ -55,21 +56,22 @@ class Gen3KeyboardTeleop(Teleoperator):
         ps = self.config.pos_sensitivity
         rs = self.config.rot_sensitivity
         self._pos_keys = {
-            "i": np.asarray([1.0, 0.0, 0.0]) * ps,
-            "k": np.asarray([-1.0, 0.0, 0.0]) * ps,
-            "j": np.asarray([0.0, 1.0, 0.0]) * ps,
-            "l": np.asarray([0.0, -1.0, 0.0]) * ps,
-            "u": np.asarray([0.0, 0.0, 1.0]) * ps,
-            "o": np.asarray([0.0, 0.0, -1.0]) * ps,
+            "w": np.asarray([1.0, 0.0, 0.0]) * ps,
+            "s": np.asarray([-1.0, 0.0, 0.0]) * ps,
+            "a": np.asarray([0.0, 1.0, 0.0]) * ps,
+            "d": np.asarray([0.0, -1.0, 0.0]) * ps,
+            "q": np.asarray([0.0, 0.0, 1.0]) * ps,
+            "e": np.asarray([0.0, 0.0, -1.0]) * ps,
         }
         self._rot_keys = {
-            "z": np.asarray([1.0, 0.0, 0.0]) * rs,
-            "x": np.asarray([-1.0, 0.0, 0.0]) * rs,
-            "c": np.asarray([0.0, 1.0, 0.0]) * rs,
-            "v": np.asarray([0.0, -1.0, 0.0]) * rs,
-            "n": np.asarray([0.0, 0.0, 1.0]) * rs,
-            "m": np.asarray([0.0, 0.0, -1.0]) * rs,
+            "i": np.asarray([1.0, 0.0, 0.0]) * rs,
+            "k": np.asarray([-1.0, 0.0, 0.0]) * rs,
+            "j": np.asarray([0.0, 1.0, 0.0]) * rs,
+            "l": np.asarray([0.0, -1.0, 0.0]) * rs,
+            "u": np.asarray([0.0, 0.0, 1.0]) * rs,
+            "o": np.asarray([0.0, 0.0, -1.0]) * rs,
         }
+        self._gripper_key = "p"
 
     @property
     def action_features(self) -> dict[str, type]:
@@ -117,8 +119,8 @@ class Gen3KeyboardTeleop(Teleoperator):
 
     def __str__(self) -> str:
         msg = "Gen3 Keyboard Teleop (TWIST_TCP)\n"
-        msg += "\tMove X: I/K   Y: J/L   Z: U/O\n"
-        msg += "\tRotate X: Z/X   Y: C/V   Z: N/M\n"
+        msg += "\tMove   X: W/S   Y: A/D   Z: Q/E\n"
+        msg += "\tRotate roll: I/K   pitch: J/L   yaw: U/O\n"
         msg += "\tToggle gripper: P\n"
         return msg
 
@@ -146,12 +148,12 @@ class Gen3KeyboardTeleop(Teleoperator):
     def _drain(self) -> None:
         while not self._event_queue.empty():
             ch, pressed = self._event_queue.get_nowait()
-            if ch == "p" and pressed and ch not in self._pressed:
-                self._gripper_closed = not self._gripper_closed
-                self._pressed.add(ch)
-                continue
-            if ch == "p" and not pressed:
-                self._pressed.discard(ch)
+            if ch == self._gripper_key:
+                if pressed and ch not in self._pressed:
+                    self._gripper_closed = not self._gripper_closed
+                    self._pressed.add(ch)
+                elif not pressed:
+                    self._pressed.discard(ch)
                 continue
 
             if ch in self._pos_keys:

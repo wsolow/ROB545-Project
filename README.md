@@ -7,10 +7,28 @@
 
 # Testing
 After installing the above project dependencies, try running 
-```scripts/mj_teleop.py```
+```python3 scripts/mj_teleop.py```
 
 To view the wirst and tabletop camera run which will bring up cv2 windows:
-```scripts/mj_teleop.py --wrist_camera --tabletop_camera```
+```python3 scripts/mj_teleop.py --wrist_camera --tabletop_camera```
+
+# Image-Based Visual Servoing
+To run image based visual servoing in Mujoco:
+```python3 scripts/mj_ibvs.py```
+This will move the robot to a default position with the cube in view, servo to the setpoint recorded,
+and then execute a pre-defined grasp. 
+
+# Imitation Learning
+Imitation learning is built upon the LeRobot package which provides nice support for dataset configs and is widely used. To install: 
+```git clone https://github.com/huggingface/lerobot.git```
+and then install with pip
+```pip install -e 'lerobot[training,dataset,diffusion]```
+
+To test the recording script in Mujoco, run:
+```python3 scripts/record_gen3.py``` 
+which will print all the keyboard commands for recording using the SE3 keyboard. 
+
+
 
 On the first run, this should take a few minutes to configure the CUDA kernel with Mujoco Warp. After that a window should pop up (see window.png for example) with the kinova arm. If you press "k" you should see the gripper open and close.
 

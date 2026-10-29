@@ -22,25 +22,27 @@ except Exception as e:  # pragma: no cover
 def apply_gen3_recording_control(control: str, events: dict[str, bool]) -> None:
     """Map recording control keys onto the shared events dict.
 
-    ``control`` is one of ``"end"`` (``]``), ``"rerecord"`` (``[``), or ``"esc"``.
+    ``control`` is one of ``"end"`` (``]`` / Enter), ``"rerecord"`` (``[``),
+    or ``"stop"`` (Esc).
     """
     if control == "end":
-        print("'] pressed. Ending episode and saving...")
+        print("']' / Enter pressed. Ending episode and saving...")
         events["exit_early"] = True
     elif control == "rerecord":
-        print("[ pressed. Discarding episode and re-recording...")
+        print("'[' pressed. Discarding episode and re-recording...")
         events["rerecord_episode"] = True
         events["exit_early"] = True
-    elif control == "esc":
+    elif control == "stop":
         print("Escape pressed. Stopping data recording...")
         events["stop_recording"] = True
         events["exit_early"] = True
 
 
 def init_gen3_recording_listener() -> tuple[Any | None, dict[str, bool]]:
-    """Start a pynput listener for ``[`` / ``]`` / Esc episode controls.
+    """Start a pynput listener for ``[`` / ``]`` / Enter / Esc episode controls.
 
-    Returns ``(listener, events)``. ``listener`` may be ``None`` if capture is
+    These keys do not overlap WASD/QE/IK/JL/UO/P motion. Returns
+    ``(listener, events)``. ``listener`` may be ``None`` if capture is
     unavailable; ``events`` is always a mutable flag dict.
     """
     events = {
@@ -60,9 +62,8 @@ def init_gen3_recording_listener() -> tuple[Any | None, dict[str, bool]]:
         try:
             ch = key.char
         except AttributeError:
-            ch = None
             if key == pynput_keyboard.Key.esc:
-                apply_gen3_recording_control("esc", events)
+                apply_gen3_recording_control("stop", events)
             elif key == pynput_keyboard.Key.enter:
                 apply_gen3_recording_control("end", events)
             return

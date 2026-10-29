@@ -5,9 +5,9 @@ LeRobot teleops. Episodes are saved under ``_data/<dataset_name>/``.
 
 Example::
 
-    PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/record_gen3.py \\
-      --robot mj_gen3 --teleop gen3_keyboard \\
-      --dataset-name pick_pink_block --task "Pick the pink block" \\
+    PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/record_gen3.py
+      --robot mj_gen3 --teleop gen3_keyboard
+      --dataset-name pick_pink_block --task "Pick the pink block"
       --fps 20 --num-episodes 5
 
 Written by Will Solow, 2026.
@@ -66,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rot-sensitivity",
         type=float,
-        default=0.2,
+        default=0.15,
         help="Angular twist magnitude for gen3_keyboard (rad/s-ish).",
     )
     parser.add_argument("--device", type=str, default="cuda", help="MuJoCo sim device.")
@@ -108,7 +108,10 @@ def main(argv: list[str] | None = None) -> int:
         "action_spec": "TWIST_TCP",
     }
     if args.robot == "mj_gen3":
+        # One env.step advances ~4 ms of sim; substep so wall-clock fps ≈ realtime.
+        mj_step_dt = 0.004
         robot_overrides["device"] = args.device
+        robot_overrides["physics_steps_per_action"] = max(1, round((1.0 / float(args.fps)) / mj_step_dt))
     else:
         robot_overrides["robot_ip"] = args.robot_ip
         robot_overrides["dt"] = 1.0 / float(args.fps)

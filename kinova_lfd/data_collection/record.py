@@ -104,6 +104,7 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 policy=None,
                 view_wrist=cfg.view_wrist,
                 view_tabletop=cfg.view_tabletop,
+                ignore_mjlab_keys=True,
             )
             mj_viewer.open_display()
             print("[record] MuJoCo viewer opened (syncs each control step).")
@@ -113,8 +114,11 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             "  ] / Enter / gamepad success  -> end episode & save\n"
             "  [         / gamepad rerecord -> discard & rerecord\n"
             "  Esc       / gamepad failure  -> stop session\n"
-            "  Motion (gen3_keyboard): I/K J/L U/O  rot Z/X C/V N/M  gripper P\n"
+            "  Motion (gen3_keyboard):\n"
+            "    Move X: W/S  Y: A/D  Z: Q/E\n"
+            "    Rot  roll: I/K  pitch: J/L  yaw: U/O  gripper: P\n"
             "  Motion (keyboard_ee/gamepad): stock LeRobot translation + gripper\n"
+            "  Keep focus off the MuJoCo window so Simulate letter hotkeys do not fire.\n"
         )
 
         listener, events = init_gen3_recording_listener()

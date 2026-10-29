@@ -42,7 +42,7 @@ class PIDController:
         self._prev_error: np.ndarray | None = None
 
     def _as_gain(self, g: float | np.ndarray) -> np.ndarray:
-        arr = np.asarray(g, dtype=np.float64)
+        arr = np.asarray(g)
         if arr.ndim == 0:
             return np.full(self.dim, float(arr), dtype=np.float64)
         arr = arr.reshape(-1)
@@ -57,17 +57,18 @@ class PIDController:
 
     def __call__(self, error: np.ndarray, dt: float) -> np.ndarray:
         """Compute the PID output for ``error`` over timestep ``dt``."""
-        e = np.asarray(error, dtype=np.float64).reshape(self.dim)
-        dt = max(float(dt), 1e-6)
+        dt = max(dt, 1e-6)
 
-        self._integral = self._integral + e * dt
+        self._integral = self._integral + error * dt
         if self.i_limit is not None:
             self._integral = np.clip(self._integral, -self.i_limit, self.i_limit)
 
-        derivative = np.zeros(self.dim, dtype=np.float64) if self._prev_error is None else (e - self._prev_error) / dt
-        self._prev_error = e.copy()
+        derivative = (
+            np.zeros(self.dim, dtype=np.float64) if self._prev_error is None else (error - self._prev_error) / dt
+        )
+        self._prev_error = error.copy()
 
-        u = self.kp * e + self.ki * self._integral + self.kd * derivative
+        u = self.kp * error + self.ki * self._integral + self.kd * derivative
         if self.out_limit is not None:
             u = np.clip(u, -self.out_limit, self.out_limit)
         return u

@@ -7,7 +7,15 @@ from kinova_lfd.envs.base.gym import GymEnv
 
 
 class MjDifferentialIk:
-    def __init__(self, env: GymEnv):
+    def __init__(
+        self,
+        env: GymEnv,
+        *,
+        tau: float = 0.03,
+        a_max_lin: float = 3.0,
+        a_max_ang: float = 8.0,
+        max_lead_pos: float = 0.03,
+    ):
         self._env = env
         self._ik_action_cfg = DifferentialIKActionCfg(
             entity_name="robot",
@@ -27,9 +35,12 @@ class MjDifferentialIk:
         self._goal_quat = None
         self._twist_f = None
         self.active = False
-        self.tau = 0.08  # twist low-pass time constant (s)
-        self.a_max = None  # lazily built (6,) accel limits
-        self.max_lead_pos = 0.03  # m the goal may lead the measured pos
+        # Twist low-pass time constant (s) and accel limits (m/s^2, rad/s^2).
+        self.tau = float(tau)
+        self.a_max_lin = float(a_max_lin)
+        self.a_max_ang = float(a_max_ang)
+        self.a_max = None  # lazily built (6,) tensor on first filter call
+        self.max_lead_pos = float(max_lead_pos)
 
     def reset(self) -> None:
         """Drop the integrated tool goal and the velocity filter."""
@@ -40,7 +51,11 @@ class MjDifferentialIk:
         dt = self._env.dt
         if self._twist_f is None:
             self._twist_f = torch.zeros_like(twist)
-            self.a_max = torch.tensor([1.0] * 3 + [3.0] * 3, device=twist.device)  # m/s^2, rad/s^2
+            self.a_max = torch.tensor(
+                [self.a_max_lin] * 3 + [self.a_max_ang] * 3,
+                device=twist.device,
+                dtype=twist.dtype,
+            )
         a = dt / (self.tau + dt)
         step = a * (twist - self._twist_f)
         step = torch.clamp(step, -self.a_max * dt, self.a_max * dt)

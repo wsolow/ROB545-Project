@@ -58,12 +58,12 @@ class Se3Keyboard(DeviceBase):
         msg = f"Keyboard Controller for SE(3): {self.__class__.__name__}\n"
         msg += "\t----------------------------------------------\n"
         msg += "\tToggle gripper (open/close): P\n"
-        msg += "\tMove arm along x-axis: I/K\n"
-        msg += "\tMove arm along y-axis: J/L\n"
-        msg += "\tMove arm along z-axis: U/O\n"
-        msg += "\tRotate arm along x-axis: Z/X\n"
-        msg += "\tRotate arm along y-axis: C/V\n"
-        msg += "\tRotate arm along z-axis: N/M"
+        msg += "\tMove arm along x-axis: W/S\n"
+        msg += "\tMove arm along y-axis: A/D\n"
+        msg += "\tMove arm along z-axis: Q/E\n"
+        msg += "\tRotate arm along x-axis: I/K\n"
+        msg += "\tRotate arm along y-axis: J/L\n"
+        msg += "\tRotate arm along z-axis: U/O"
         return msg
 
     def reset(self):
@@ -118,28 +118,28 @@ class Se3Keyboard(DeviceBase):
             self._delta_rot -= self._INPUT_KEY_MAPPING[char]
 
     def _create_key_bindings(self):
-        self._POS_KEYS = {"I", "K", "J", "L", "U", "O"}
-        self._ROT_KEYS = {"Z", "X", "C", "V", "N", "M"}
+        self._POS_KEYS = {"W", "S", "A", "D", "Q", "E"}
+        self._ROT_KEYS = {"I", "K", "J", "L", "U", "O"}
 
         self._INPUT_KEY_MAPPING = {
             # x-axis (forward/back)
-            "I": np.asarray([1.0, 0.0, 0.0]) * self.pos_sensitivity,
-            "K": np.asarray([-1.0, 0.0, 0.0]) * self.pos_sensitivity,
+            "W": np.asarray([1.0, 0.0, 0.0]) * self.pos_sensitivity,
+            "S": np.asarray([-1.0, 0.0, 0.0]) * self.pos_sensitivity,
             # y-axis (left/right)
-            "J": np.asarray([0.0, 1.0, 0.0]) * self.pos_sensitivity,
-            "L": np.asarray([0.0, -1.0, 0.0]) * self.pos_sensitivity,
+            "A": np.asarray([0.0, 1.0, 0.0]) * self.pos_sensitivity,
+            "D": np.asarray([0.0, -1.0, 0.0]) * self.pos_sensitivity,
             # z-axis (up/down)
-            "U": np.asarray([0.0, 0.0, 1.0]) * self.pos_sensitivity,
-            "O": np.asarray([0.0, 0.0, -1.0]) * self.pos_sensitivity,
+            "Q": np.asarray([0.0, 0.0, 1.0]) * self.pos_sensitivity,
+            "E": np.asarray([0.0, 0.0, -1.0]) * self.pos_sensitivity,
             # roll (around x)
-            "Z": np.asarray([1.0, 0.0, 0.0]) * self.rot_sensitivity,
-            "X": np.asarray([-1.0, 0.0, 0.0]) * self.rot_sensitivity,
+            "I": np.asarray([1.0, 0.0, 0.0]) * self.rot_sensitivity,
+            "K": np.asarray([-1.0, 0.0, 0.0]) * self.rot_sensitivity,
             # pitch (around y)
-            "C": np.asarray([0.0, 1.0, 0.0]) * self.rot_sensitivity,
-            "V": np.asarray([0.0, -1.0, 0.0]) * self.rot_sensitivity,
+            "J": np.asarray([0.0, 1.0, 0.0]) * self.rot_sensitivity,
+            "L": np.asarray([0.0, -1.0, 0.0]) * self.rot_sensitivity,
             # yaw (around z)
-            "N": np.asarray([0.0, 0.0, 1.0]) * self.rot_sensitivity,
-            "M": np.asarray([0.0, 0.0, -1.0]) * self.rot_sensitivity,
+            "U": np.asarray([0.0, 0.0, 1.0]) * self.rot_sensitivity,
+            "O": np.asarray([0.0, 0.0, -1.0]) * self.rot_sensitivity,
         }
 
 
