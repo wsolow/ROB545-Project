@@ -23,7 +23,7 @@ def register_gen3_robots() -> None:
         return
 
     # Direct import registers ChoiceRegistry subclasses.
-    from kinova_lfd.envs.lerobot import (  # noqa: F401
+    from kinova_lfd.envs.le_robot import (  # noqa: F401
         KortexTcpGen3RobotConfig,
         MjGen3RobotConfig,
     )

@@ -11,7 +11,7 @@ from lerobot.teleoperators import TeleoperatorConfig
 from lerobot.teleoperators.gamepad.configuration_gamepad import GamepadTeleopConfig
 from lerobot.teleoperators.keyboard.configuration_keyboard import KeyboardEndEffectorTeleopConfig
 
-from kinova_lfd.envs.lerobot import KortexTcpGen3RobotConfig, MjGen3RobotConfig
+from kinova_lfd.envs.le_robot import KortexTcpGen3RobotConfig, MjGen3RobotConfig
 
 
 @dataclass
