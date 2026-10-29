@@ -224,6 +224,10 @@ class KortexEnv(GymEnv):
     def _wrist_rgb(self) -> np.ndarray:
         return self._current_wrist_rgb
 
+    def _get_latest_rgbd_wrist(self) -> dict[str, Any]:
+        """Return the latest wrist RGB frame."""
+        return {"rgb": self._wrist_rgb}
+
     @property
     def _prev_actions(self) -> np.ndarray:
         """Return the previous action taken in the environment."""

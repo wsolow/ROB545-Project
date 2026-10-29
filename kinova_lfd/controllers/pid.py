@@ -17,10 +17,7 @@ class PIDGains:
 
 
 class PIDController:
-    """Discrete PID that maps an error vector to a command vector.
-
-    ``u = kp * e + ki * ∫e dt + kd * de/dt``
-    """
+    """Discrete PID that maps an error vector to a command vector."""
 
     def __init__(
         self,
@@ -39,8 +36,8 @@ class PIDController:
         self.kp = self._as_gain(kp)
         self.ki = self._as_gain(ki)
         self.kd = self._as_gain(kd)
-        self.i_limit = None if i_limit is None else float(i_limit)
-        self.out_limit = None if out_limit is None else float(out_limit)
+        self.i_limit = None if i_limit is None else i_limit
+        self.out_limit = None if out_limit is None else out_limit
         self._integral = np.zeros(self.dim, dtype=np.float64)
         self._prev_error: np.ndarray | None = None
 
@@ -67,10 +64,7 @@ class PIDController:
         if self.i_limit is not None:
             self._integral = np.clip(self._integral, -self.i_limit, self.i_limit)
 
-        if self._prev_error is None:
-            derivative = np.zeros(self.dim, dtype=np.float64)
-        else:
-            derivative = (e - self._prev_error) / dt
+        derivative = np.zeros(self.dim, dtype=np.float64) if self._prev_error is None else (e - self._prev_error) / dt
         self._prev_error = e.copy()
 
         u = self.kp * e + self.ki * self._integral + self.kd * derivative

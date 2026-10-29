@@ -2,13 +2,11 @@
 
 Eye-in-hand control law (Chaumette & Hutchinson / ViSP):
 
-    v_c = -λ L⁺ (s - s*)
+    v_c = -lambda L⁺ (s - s*)
 
 where s are normalized image point features and L stacks the point interaction
 matrices. Camera twist is mapped to the TCP/tool frame using the fixed
-wrist-camera → pinch_site extrinsic from the Gen3 MJCF.
-
-Written for ROB545; works with Mj-Gen3 and Kortex-TCP twist interfaces.
+wrist-camera -> pinch_site extrinsic from the Gen3 MJCF.
 """
 
 from __future__ import annotations
@@ -21,12 +19,10 @@ import numpy as np
 
 from kinova_lfd.controllers.pid import PIDController, PIDGains
 
-# Wrist camera and pinch_site poses relative to bracelet_link (MuJoCo wxyz).
-# From kinova_lfd/envs/base/mujoco/assets/kinova_gen3/xmls/gen3_gripper.xml
-_BRACELET_CAM_POS = np.array([0.0, -0.05639, -0.063475], dtype=np.float64)
-_BRACELET_CAM_QUAT_WXYZ = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
-_BRACELET_PINCH_POS = np.array([0.0, 0.0, -0.211525], dtype=np.float64)
-_BRACELET_PINCH_QUAT_WXYZ = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float64)
+_BRACELET_CAM_POS = np.array([0.0, -0.05639, -0.063475])
+_BRACELET_CAM_QUAT_WXYZ = np.array([0.0, 0.0, 0.0, 1.0])
+_BRACELET_PINCH_POS = np.array([0.0, 0.0, -0.211525])
+_BRACELET_PINCH_QUAT_WXYZ = np.array([0.0, 1.0, 0.0, 0.0])
 
 
 @dataclass
@@ -89,29 +85,38 @@ def get_block_hsv_preset(name: str) -> BlockHsvCfg:
 
 def quat_wxyz_to_rotmat(quat_wxyz: np.ndarray) -> np.ndarray:
     """Convert a (w, x, y, z) quaternion to a 3x3 rotation matrix."""
-    w, x, y, z = np.asarray(quat_wxyz, dtype=np.float64).reshape(4)
+    w, x, y, z = quat_wxyz
     return np.array(
         [
             [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
             [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
             [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
-        ],
-        dtype=np.float64,
+        ]
     )
 
 
 def default_cam_T_tcp() -> tuple[np.ndarray, np.ndarray]:
-    """Fixed transform of pinch_site (TCP) relative to the wrist camera.
+    """Compute fixed transform of pinch_site (TCP) relative to the wrist camera.
+
+    MJCF camera poses are in the MuJoCo camera body frame (looks along -Z).
+    IBVS interaction matrices expect an OpenCV/optical frame (X right, Y down,
+    Z forward/+look). Convert with ``diag(1, -1, -1)`` before returning.
 
     Returns:
-        t_cam_tcp: (3,) position of TCP in the camera frame.
-        R_cam_tcp: (3, 3) rotation taking TCP-frame vectors into the camera frame
-            (columns are TCP axes expressed in camera coordinates).
+        t_cam_tcp: (3,) position of TCP in the **optical** camera frame.
+        R_cam_tcp: (3, 3) rotation taking TCP-frame vectors into the optical
+            camera frame (columns are TCP axes expressed in optical coordinates).
+
     """
     R_b_c = quat_wxyz_to_rotmat(_BRACELET_CAM_QUAT_WXYZ)
     R_b_tcp = quat_wxyz_to_rotmat(_BRACELET_PINCH_QUAT_WXYZ)
+    # Camera body frame (looks along -Z).
     R_cam_tcp = R_b_c.T @ R_b_tcp
     t_cam_tcp = R_b_c.T @ (_BRACELET_PINCH_POS - _BRACELET_CAM_POS)
+    # OpenCV optical frame: X right, Y down, Z forward (= MuJoCo -Z).
+    r_opt_mj = np.diag([1.0, -1.0, -1.0])
+    t_cam_tcp = r_opt_mj @ t_cam_tcp
+    R_cam_tcp = r_opt_mj @ R_cam_tcp
     return t_cam_tcp, R_cam_tcp
 
 
@@ -122,10 +127,6 @@ def camera_twist_to_tcp(
     R_cam_tcp: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Map camera-frame twist to TCP-frame twist for a rigid eye-in-hand mount."""
-    v_cam = np.asarray(v_cam, dtype=np.float64).reshape(3)
-    w_cam = np.asarray(w_cam, dtype=np.float64).reshape(3)
-    t_cam_tcp = np.asarray(t_cam_tcp, dtype=np.float64).reshape(3)
-    R_cam_tcp = np.asarray(R_cam_tcp, dtype=np.float64).reshape(3, 3)
     w_tcp = R_cam_tcp.T @ w_cam
     v_tcp = R_cam_tcp.T @ (v_cam + np.cross(w_cam, t_cam_tcp))
     return v_tcp, w_tcp
@@ -133,39 +134,18 @@ def camera_twist_to_tcp(
 
 def interaction_matrix(x: float, y: float, z: float) -> np.ndarray:
     """2x6 interaction matrix for a point feature at normalized (x, y) and depth Z."""
-    z = max(float(z), 1e-4)
+    z = max(z, 1e-4)
     return np.array(
         [
             [-1.0 / z, 0.0, x / z, x * y, -(1.0 + x * x), y],
             [0.0, -1.0 / z, y / z, 1.0 + y * y, -x * y, -x],
-        ],
-        dtype=np.float64,
+        ]
     )
-
-
-def ensure_rgb_u8(rgb: np.ndarray) -> np.ndarray:
-    """Convert RGB image to HxWx3 uint8."""
-    img = np.asarray(rgb)
-    if img.ndim == 4:
-        img = img.squeeze(0)
-    if img.ndim == 3 and img.shape[0] in (1, 3) and img.shape[-1] not in (1, 3):
-        # CHW -> HWC
-        img = np.transpose(img, (1, 2, 0))
-    if img.ndim == 2:
-        img = np.stack([img, img, img], axis=-1)
-    if img.shape[-1] == 4:
-        img = img[..., :3]
-    if np.issubdtype(img.dtype, np.floating):
-        max_val = float(np.nanmax(img)) if img.size else 1.0
-        img = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8) if max_val <= 1.0 + 1e-3 else np.clip(img, 0, 255).astype(np.uint8)
-    else:
-        img = img.astype(np.uint8)
-    return np.ascontiguousarray(img)
 
 
 def order_corners_ccw(corners_px: np.ndarray) -> np.ndarray:
     """Order 4 image corners counter-clockwise about their centroid, starting at top-left-ish."""
-    pts = np.asarray(corners_px, dtype=np.float64).reshape(-1, 2)
+    pts = np.asarray(corners_px).reshape(-1, 2)
     if pts.shape[0] != 4:
         raise ValueError(f"Expected 4 corners, got {pts.shape[0]}")
     center = pts.mean(axis=0)
@@ -180,8 +160,7 @@ def order_corners_ccw(corners_px: np.ndarray) -> np.ndarray:
 
 def extract_block_corners_px(rgb: np.ndarray, cfg: BlockHsvCfg) -> np.ndarray | None:
     """Segment a colored block and return 4 ordered corner pixels, or None on failure."""
-    rgb_u8 = ensure_rgb_u8(rgb)
-    hsv = cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2HSV)
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
     mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
     for low, high in cfg.hsv_ranges:
         mask = cv2.bitwise_or(mask, cv2.inRange(hsv, np.array(low, dtype=np.uint8), np.array(high, dtype=np.uint8)))
@@ -205,19 +184,28 @@ def extract_block_corners_px(rgb: np.ndarray, cfg: BlockHsvCfg) -> np.ndarray | 
 
 def pixels_to_normalized(corners_px: np.ndarray, K: np.ndarray) -> np.ndarray:
     """Convert pixel corners (N, 2) to normalized image coords (N, 2)."""
-    K = np.asarray(K, dtype=np.float64).reshape(3, 3)
     fx, fy = K[0, 0], K[1, 1]
     cx, cy = K[0, 2], K[1, 2]
-    pts = np.asarray(corners_px, dtype=np.float64).reshape(-1, 2)
-    x = (pts[:, 0] - cx) / fx
-    y = (pts[:, 1] - cy) / fy
+    x = (corners_px[:, 0] - cx) / fx
+    y = (corners_px[:, 1] - cy) / fy
     return np.stack([x, y], axis=1)
 
 
-def sample_depths(depth: np.ndarray | None, corners_px: np.ndarray, z_default: float) -> np.ndarray:
-    """Sample depth at corner pixels; fall back to z_default when missing/invalid."""
-    pts = np.asarray(corners_px, dtype=np.float64).reshape(-1, 2)
-    zs = np.full(pts.shape[0], float(z_default), dtype=np.float64)
+def sample_depths(
+    depth: np.ndarray | None,
+    corners_px: np.ndarray,
+    z_default: float,
+    *,
+    inset_frac: float = 0.65,
+) -> np.ndarray:
+    """Sample depth near corner pixels; fall back to z_default when missing/invalid.
+
+    ``minAreaRect`` corners often land on the silhouette / table. Sample along the
+    ray from the corner centroid toward each corner at ``inset_frac`` of the radius
+    so the lookup hits the block face instead of the background.
+    """
+    pts = np.asarray(corners_px).reshape(-1, 2)
+    zs = np.full(pts.shape[0], z_default)
     if depth is None:
         return zs
 
@@ -227,32 +215,35 @@ def sample_depths(depth: np.ndarray | None, corners_px: np.ndarray, z_default: f
     if d.ndim != 2:
         return zs
 
+    # Pull sample points inward from silhouette corners toward the centroid.
+    frac = float(np.clip(inset_frac, 0.0, 1.0))
+    if pts.shape[0] >= 1 and frac < 1.0:
+        center = pts.mean(axis=0, keepdims=True)
+        sample_pts = center + frac * (pts - center)
+    else:
+        sample_pts = pts
+
     h, w = d.shape
-    for i, (u, v) in enumerate(pts):
+    for i, (u, v) in enumerate(sample_pts):
         ui = int(np.clip(round(u), 0, w - 1))
         vi = int(np.clip(round(v), 0, h - 1))
         z = float(d[vi, ui])
         if np.isfinite(z) and z > 1e-4:
-            # MuJoCo depth is meters; guard against accidental mm-scale values.
             zs[i] = z * 0.001 if z > 100.0 else z
     return zs
 
 
 def quat_error_rotvec(q_des_wxyz: np.ndarray, q_cur_wxyz: np.ndarray) -> np.ndarray:
     """Rotation-vector error that rotates ``q_cur`` into ``q_des`` (both wxyz)."""
-    q_des = np.asarray(q_des_wxyz, dtype=np.float64).reshape(4)
-    q_cur = np.asarray(q_cur_wxyz, dtype=np.float64).reshape(4)
-    # q_err = q_des * q_cur^{-1}
-    w0, x0, y0, z0 = q_des
-    w1, x1, y1, z1 = q_cur[0], -q_cur[1], -q_cur[2], -q_cur[3]
+    w0, x0, y0, z0 = q_des_wxyz
+    w1, x1, y1, z1 = q_cur_wxyz[0], -q_cur_wxyz[1], -q_cur_wxyz[2], -q_cur_wxyz[3]
     q_err = np.array(
         [
             w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1,
             w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1,
             w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1,
             w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1,
-        ],
-        dtype=np.float64,
+        ]
     )
     if q_err[0] < 0.0:
         q_err = -q_err
@@ -260,15 +251,17 @@ def quat_error_rotvec(q_des_wxyz: np.ndarray, q_cur_wxyz: np.ndarray) -> np.ndar
     xyz = q_err[1:]
     n = float(np.linalg.norm(xyz))
     if n < 1e-9:
-        return np.zeros(3, dtype=np.float64)
+        return np.zeros(3)
     angle = 2.0 * np.arctan2(n, w)
     return (xyz / n) * angle
 
 
-def world_twist_to_tcp(v_world: np.ndarray, w_world: np.ndarray, quat_wxyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def world_twist_to_tcp(
+    v_world: np.ndarray, w_world: np.ndarray, quat_wxyz: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """Express a world-frame twist in the TCP/tool frame."""
     R = quat_wxyz_to_rotmat(quat_wxyz)
-    return R.T @ np.asarray(v_world, dtype=np.float64).reshape(3), R.T @ np.asarray(w_world, dtype=np.float64).reshape(3)
+    return R.T @ v_world, R.T @ w_world
 
 
 class GraspPhase(Enum):
@@ -284,7 +277,7 @@ class GraspPhase(Enum):
 class IBVSController:
     """HSV corner IBVS + Z-axis PID grasp state machine.
 
-    Phases: IBVS alignment → descend by world-Z offset → close gripper → lift
+    Phases: IBVS alignment -> descend by world-Z offset -> close gripper -> lift
     back to the pre-grasp height. Descend/lift twists come from ``self.pid``.
     """
 
@@ -292,42 +285,47 @@ class IBVSController:
         self,
         setpoint_rgb: np.ndarray,
         *,
-        intrinsics_K: np.ndarray,
+        intrinsics_k: np.ndarray,
         block_hsv: BlockHsvCfg | None = None,
-        lambda_gain: float = 0.5,
-        z_default: float = 0.4,
-        cam_T_tcp: tuple[np.ndarray, np.ndarray] | None = None,
+        lambda_gain: float = 0.35,
+        z_default: float = 0.28,
+        cam_t_tcp: tuple[np.ndarray, np.ndarray] | None = None,
         max_lin_vel: float = 0.15,
-        max_ang_vel: float = 0.5,
+        max_ang_vel: float = 0.15,
         gripper_cmd: float = 0.0,
-        grasp_z_offset: float = 0.08,
-        ibvs_error_threshold: float = 0.05,
-        ibvs_settle_steps: int = 15,
+        grasp_z_abs: float = 0.03,
+        ibvs_error_threshold: float = 0.02,
+        ibvs_settle_steps: int = 30,
+        use_angular: bool = False,
         pose_tol: float = 0.008,
+        xy_pose_tol: float = 0.02,
         close_hold_steps: int = 40,
         dt: float = 0.01,
         pid: PIDController | None = None,
         pid_ori: PIDController | None = None,
     ) -> None:
-        self.K = np.asarray(intrinsics_K, dtype=np.float64).reshape(3, 3)
+        self.K = intrinsics_k
         self.block_hsv = block_hsv if block_hsv is not None else get_block_hsv_preset("pink")
-        self.lambda_gain = float(lambda_gain)
-        self.z_default = float(z_default)
-        self.max_lin_vel = float(max_lin_vel)
-        self.max_ang_vel = float(max_ang_vel)
-        self.gripper_cmd = float(gripper_cmd)
-        self.grasp_z_offset = float(grasp_z_offset)
-        self.ibvs_error_threshold = float(ibvs_error_threshold)
-        self.ibvs_settle_steps = int(ibvs_settle_steps)
-        self.pose_tol = float(pose_tol)
-        self.close_hold_steps = int(close_hold_steps)
-        self.dt = float(dt)
+        self.lambda_gain = lambda_gain
+        self.z_default = z_default
+        self.max_lin_vel = max_lin_vel
+        self.max_ang_vel = max_ang_vel
+        self.gripper_cmd = gripper_cmd
+        self.grasp_z_abs = grasp_z_abs
+        self.ibvs_error_threshold = ibvs_error_threshold
+        self.ibvs_settle_steps = ibvs_settle_steps
+        self.use_angular = use_angular
+        self.pose_tol = pose_tol
+        self.xy_pose_tol = xy_pose_tol
+        self.close_hold_steps = close_hold_steps
+        self.dt = dt
+        self._last_twist: np.ndarray | None = None
 
-        if cam_T_tcp is None:
+        if cam_t_tcp is None:
             self.t_cam_tcp, self.R_cam_tcp = default_cam_T_tcp()
         else:
-            self.t_cam_tcp = np.asarray(cam_T_tcp[0], dtype=np.float64).reshape(3)
-            self.R_cam_tcp = np.asarray(cam_T_tcp[1], dtype=np.float64).reshape(3, 3)
+            self.t_cam_tcp = cam_t_tcp[0]
+            self.R_cam_tcp = cam_t_tcp[1]
 
         self.pid = pid or PIDController(
             dim=3,
@@ -399,45 +397,53 @@ class IBVSController:
         if features is None:
             self._last_corners_px = None
             self._last_error_norm = None
+            self._last_twist = None
             self._ibvs_ok_steps = 0
-            return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.gripper_cmd], dtype=np.float64)
+            return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.gripper_cmd])
 
         corners_px, s, z = features
         self._last_corners_px = corners_px
 
         n = s.shape[0]
-        L = np.zeros((2 * n, 6), dtype=np.float64)
-        e = np.zeros(2 * n, dtype=np.float64)
+        L = np.zeros((2 * n, 6))
+        e = np.zeros(2 * n)
         for i in range(n):
             L[2 * i : 2 * i + 2] = interaction_matrix(float(s[i, 0]), float(s[i, 1]), float(z[i]))
             e[2 * i] = float(s[i, 0] - self.s_star[i, 0])
             e[2 * i + 1] = float(s[i, 1] - self.s_star[i, 1])
 
         self._last_error_norm = float(np.linalg.norm(e))
-        v_cam = -self.lambda_gain * np.linalg.pinv(L) @ e  # (6,)
+        if self.use_angular:
+            v_cam = -self.lambda_gain * np.linalg.pinv(L) @ e  # (6,)
+        else:
+            # Translation-only: avoid early wx/wy tilt from angular columns of L.
+            v_lin = -self.lambda_gain * np.linalg.pinv(L[:, :3]) @ e
+            v_cam = np.zeros(6)
+            v_cam[:3] = v_lin
         v_tcp, w_tcp = camera_twist_to_tcp(v_cam[:3], v_cam[3:], self.t_cam_tcp, self.R_cam_tcp)
         v_tcp, w_tcp = self._clip_twist(v_tcp, w_tcp)
-        return np.concatenate([v_tcp, w_tcp, [self.gripper_cmd]]).astype(np.float64)
+        twist = np.concatenate([v_tcp, w_tcp, [self.gripper_cmd]]).astype(np.float64)
+        self._last_twist = twist
+        return twist
 
     def _enter_descend(self, tcp_pose: np.ndarray) -> None:
-        pose = np.asarray(tcp_pose, dtype=np.float64).reshape(7)
-        self._pregrasp_pose = pose.copy()
-        self._pose_setpoint = pose.copy()
-        # Lower only in world Z.
-        self._pose_setpoint[2] = pose[2] - self.grasp_z_offset
+        """Descend to pre-specified grasp height."""
+        self._pregrasp_pose = tcp_pose.copy()
+        self._pose_setpoint = tcp_pose.copy()
+        self._pose_setpoint[2] = self.grasp_z_abs
         self.phase = GraspPhase.DESCEND
         self.gripper_cmd = 0.0
         self.pid.reset()
         self.pid_ori.reset()
 
     def _enter_close(self) -> None:
+        """Close the gripper."""
         self.phase = GraspPhase.CLOSE
         self._close_steps = 0
         self.gripper_cmd = 1.0
-        self.pid.reset()
-        self.pid_ori.reset()
 
     def _enter_lift(self) -> None:
+        """Lift the gripper."""
         assert self._pregrasp_pose is not None
         self._pose_setpoint = self._pregrasp_pose.copy()
         self.phase = GraspPhase.LIFT
@@ -448,28 +454,27 @@ class IBVSController:
     def _pid_pose_twist(self, tcp_pose: np.ndarray, dt: float) -> np.ndarray:
         """PID world-pose tracking expressed as a TCP-frame twist."""
         assert self._pose_setpoint is not None
-        pose = np.asarray(tcp_pose, dtype=np.float64).reshape(7)
         des = self._pose_setpoint
 
         # Keep XY and orientation at the pre-grasp values; only Z is offset.
-        pos_err_world = np.array(
-            [des[0] - pose[0], des[1] - pose[1], des[2] - pose[2]],
-            dtype=np.float64,
-        )
+        pos_err_world = np.array([des[0] - tcp_pose[0], des[1] - tcp_pose[1], des[2] - tcp_pose[2]])
         # Zero XY tracking effort if we only care about Z motion once aligned —
         # still correct XY drift so the grasp stays centered.
-        ori_err_world = quat_error_rotvec(des[3:7], pose[3:7])
+        ori_err_world = quat_error_rotvec(des[3:7], tcp_pose[3:7])
 
         v_world = self.pid(pos_err_world, dt)
         w_world = self.pid_ori(ori_err_world, dt)
-        v_tcp, w_tcp = world_twist_to_tcp(v_world, w_world, pose[3:7])
+        v_tcp, w_tcp = world_twist_to_tcp(v_world, w_world, tcp_pose[3:7])
         v_tcp, w_tcp = self._clip_twist(v_tcp, w_tcp)
-        return np.concatenate([v_tcp, w_tcp, [self.gripper_cmd]]).astype(np.float64)
+        return np.concatenate([v_tcp, w_tcp, [self.gripper_cmd]])
 
     def _pose_reached(self, tcp_pose: np.ndarray) -> bool:
+        """Check if the pose has been reached."""
         assert self._pose_setpoint is not None
-        pose = np.asarray(tcp_pose, dtype=np.float64).reshape(7)
-        return float(np.linalg.norm(self._pose_setpoint[:3] - pose[:3])) < self.pose_tol
+        des = self._pose_setpoint
+        dz = abs(float(des[2] - tcp_pose[2]))
+        dxy = float(np.linalg.norm(des[:2] - tcp_pose[:2]))
+        return dz < self.pose_tol and dxy < self.xy_pose_tol
 
     def __call__(
         self,
@@ -499,7 +504,7 @@ class IBVSController:
             return twist
 
         if tcp_pose is None:
-            return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.gripper_cmd], dtype=np.float64)
+            return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.gripper_cmd])
 
         if self.phase is GraspPhase.DESCEND:
             twist = self._pid_pose_twist(tcp_pose, step_dt)
@@ -509,9 +514,8 @@ class IBVSController:
             return twist
 
         if self.phase is GraspPhase.CLOSE:
-            # Hold Cartesian pose while closing.
+            # Keep Cartesian PID active so residual world-Z can finish while closing.
             twist = self._pid_pose_twist(tcp_pose, step_dt)
-            twist[:6] = 0.0
             twist[-1] = self.gripper_cmd
             self._close_steps += 1
             if self._close_steps >= self.close_hold_steps:
@@ -525,5 +529,4 @@ class IBVSController:
                 self.phase = GraspPhase.DONE
             return twist
 
-        # DONE: hold with gripper closed.
-        return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+        return np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])

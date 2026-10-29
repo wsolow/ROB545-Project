@@ -87,6 +87,50 @@ class MjViewer(NativeMujocoViewer):
             return
         super()._safe_key_callback(key)
 
+    def open_display(self) -> None:
+        """Launch the passive MuJoCo window for an external control loop.
+
+        Use this from LeRobot recording / custom loops that own ``env.step``
+        themselves. Call :meth:`sync_display` after each step, then
+        :meth:`close_display` when finished. Do **not** call :meth:`run`.
+        """
+        self.setup()
+
+    def sync_display(self) -> None:
+        """Refresh camera previews + the passive viewer from the current env state."""
+        if self.viewer is None or not self.is_running():
+            return
+        self._show_camera_previews()
+        self.sync_env_to_viewer()
+
+    def close_display(self) -> None:
+        """Close the passive viewer and any OpenCV preview windows."""
+        self.close()
+        if self._view_wrist or self._view_tabletop:
+            cv2.destroyAllWindows()
+
+    def _show_camera_previews(self) -> None:
+        """Optionally show wrist / tabletop RGB in OpenCV windows."""
+        self._rgbd_wrist = self.env._get_latest_rgbd_wrist()
+        if self._view_wrist and self._rgbd_wrist is not None and "rgb" in self._rgbd_wrist:
+            wrist_rgb = self._rgbd_wrist["rgb"]
+            if isinstance(wrist_rgb, torch.Tensor):
+                wrist_rgb = wrist_rgb.squeeze().detach().cpu().numpy()
+            if wrist_rgb.ndim == 3 and wrist_rgb.shape[0] == 3:
+                wrist_rgb = wrist_rgb.transpose(1, 2, 0)
+            cv2.imshow("RGB Wrist", cv2.cvtColor(wrist_rgb, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+
+        self._rgbd_table = self.env._get_latest_rgbd()
+        if self._view_tabletop and self._rgbd_table is not None and "rgb" in self._rgbd_table:
+            table_rgb = self._rgbd_table["rgb"]
+            if isinstance(table_rgb, torch.Tensor):
+                table_rgb = table_rgb.squeeze().detach().cpu().numpy()
+            if table_rgb.ndim == 3 and table_rgb.shape[0] == 3:
+                table_rgb = table_rgb.transpose(1, 2, 0)
+            cv2.imshow("RGB Tabletop", cv2.cvtColor(table_rgb, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+
     @override
     def _execute_step(self) -> bool:
         """Run one obs/policy/step cycle.
@@ -95,14 +139,7 @@ class MjViewer(NativeMujocoViewer):
         """
         with torch.no_grad():
             obs = self.env.get_observations()
-            self._rgbd_wrist = self.env._get_latest_rgbd_wrist()
-            if self._view_wrist and self._rgbd_wrist is not None:
-                cv2.imshow("RGB Wrist", self._rgbd_wrist["rgb"].squeeze().cpu().numpy().transpose(1, 2, 0))
-                cv2.waitKey(1)
-            self._rgbd_table = self.env._get_latest_rgbd()
-            if self._view_tabletop and self._rgbd_table is not None:
-                cv2.imshow("RGB Tabletop", self._rgbd_table["rgb"].squeeze().cpu().numpy().transpose(1, 2, 0))
-                cv2.waitKey(1)
+            self._show_camera_previews()
             if self.policy is not None:
                 if isinstance(self.policy, DeviceBase):
                     actions = self.policy(self.env._robot_tool_pose_b)

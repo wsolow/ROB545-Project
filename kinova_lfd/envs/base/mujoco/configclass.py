@@ -184,7 +184,7 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
         if hasattr(obj, key) or (isinstance(obj, dict) and key in obj):
             obj_mem = obj[key] if isinstance(obj, dict) else getattr(obj, key)
 
-            # -- 1) nested mapping → recurse ---------------------------
+            # -- 1) nested mapping -> recurse ---------------------------
             if isinstance(value, Mapping):
                 # recursively call if it is a dictionary
                 update_class_from_dict(obj_mem, value, _ns=key_ns)
@@ -192,7 +192,7 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
 
             # -- 2) iterable (list / tuple / etc.) ---------------------
             if isinstance(value, Iterable) and not isinstance(value, str):
-                # ---- 2a) flat iterable → replace wholesale ----------
+                # ---- 2a) flat iterable -> replace wholesale ----------
                 if all(not isinstance(el, Mapping) for el in value):
                     out_val = tuple(value) if isinstance(obj_mem, tuple) else value
                     if isinstance(obj, dict):
@@ -201,13 +201,13 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
                         setattr(obj, key, out_val)
                     continue
 
-                # ---- 2b) existing value is None → abort -------------
+                # ---- 2b) existing value is None -> abort -------------
                 if obj_mem is None:
                     raise ValueError(
                         f"[Config]: Cannot merge list under namespace: {key_ns} because the existing value is None."
                     )
 
-                # ---- 2c) length mismatch → abort -------------------
+                # ---- 2c) length mismatch -> abort -------------------
                 if isinstance(obj_mem, Sized) and isinstance(value, Sized) and len(obj_mem) != len(value):
                     raise ValueError(
                         f"[Config]: Incorrect length under namespace: {key_ns}."
@@ -228,7 +228,7 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
                     if not set_obj:
                         continue
 
-            # -- 3) callable attribute → resolve string --------------
+            # -- 3) callable attribute -> resolve string --------------
             elif callable(obj_mem):
                 # update function name
                 value = string_to_callable(value)
@@ -237,7 +237,7 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
             elif value is None or isinstance(value, type(obj_mem)):
                 pass
 
-            # -- 5) type mismatch → abort -----------------------------
+            # -- 5) type mismatch -> abort -----------------------------
             else:
                 raise ValueError(
                     f"[Config]: Incorrect type under namespace: {key_ns}."

@@ -6,3 +6,6 @@ kinova_lfd/envs/base/kortex/kortex_cpp_api/
 **build/
 **pinocchio/
 *.npz
+# LeRobot Gen3 demonstration datasets
+_data/
+lerobot/

@@ -309,7 +309,7 @@ class MjGen3Env(MjDirectRlEnv):
         #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
         #     normalized = np.clip(normalized, 0, 1)
 
-        #     # Apply colormap → RGBA float array → uint8
+        #     # Apply colormap -> RGBA float array -> uint8
         #     cmap = plt.get_cmap(colormap)
         #     colored = (cmap(normalized) * 255).astype(np.uint8)
 
@@ -355,7 +355,7 @@ class MjGen3Env(MjDirectRlEnv):
         #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
         #     normalized = np.clip(normalized, 0, 1)
 
-        #     # Apply colormap → RGBA float array → uint8
+        #     # Apply colormap -> RGBA float array -> uint8
         #     cmap = plt.get_cmap(colormap)
         #     colored = (cmap(normalized) * 255).astype(np.uint8)
 

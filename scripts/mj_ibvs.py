@@ -48,26 +48,44 @@ parser.add_argument(
     metavar=("H", "S", "V"),
     help="Optional HSV upper bound override (OpenCV 0-179, 0-255, 0-255).",
 )
-parser.add_argument("--lambda", dest="lambda_gain", type=float, default=0.5, help="IBVS gain λ.")
+parser.add_argument("--lambda", dest="lambda_gain", type=float, default=0.35, help="IBVS gain λ.")
 parser.add_argument(
     "--z-default",
     type=float,
-    default=0.4,
+    default=0.28,
     help="Fallback feature depth (m) when wrist depth is unavailable.",
 )
 parser.add_argument("--max-lin-vel", type=float, default=0.15, help="Max linear TCP speed (m/s).")
-parser.add_argument("--max-ang-vel", type=float, default=0.5, help="Max angular TCP speed (rad/s).")
+parser.add_argument("--max-ang-vel", type=float, default=0.15, help="Max angular TCP speed (rad/s).")
 parser.add_argument(
     "--grasp-z-offset",
     type=float,
-    default=0.08,
-    help="World-Z descend distance (m) after IBVS converges.",
+    default=0.24,
+    help="World-Z meters below IBVS pre-grasp (≈0.24 for z0.28 setpoint -> ~0.03 m).",
+)
+parser.add_argument(
+    "--grasp-z-abs",
+    type=float,
+    default=0.03,
+    help="Absolute world-Z ceiling for grasp height (pinch near block).",
 )
 parser.add_argument(
     "--ibvs-error-threshold",
     type=float,
-    default=0.05,
+    default=0.02,
     help="Normalized feature-error norm that ends the IBVS phase.",
+)
+parser.add_argument(
+    "--ibvs-settle-steps",
+    type=int,
+    default=30,
+    help="Consecutive steps below error threshold before DESCEND.",
+)
+parser.add_argument(
+    "--use-angular",
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help="Include IBVS angular DoF (default: translation-only, no tilt).",
 )
 parser.add_argument(
     "--tabletop_camera",
@@ -110,7 +128,11 @@ def _rgbd_to_numpy(rgbd: dict) -> tuple[np.ndarray, np.ndarray | None, np.ndarra
     if rgb.ndim == 3 and rgb.shape[0] == 3:
         rgb = np.transpose(rgb, (1, 2, 0))
     if np.issubdtype(rgb.dtype, np.floating):
-        rgb = (np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8) if float(np.nanmax(rgb)) <= 1.0 + 1e-3 else np.clip(rgb, 0, 255).astype(np.uint8)
+        rgb = (
+            (np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
+            if float(np.nanmax(rgb)) <= 1.0 + 1e-3
+            else np.clip(rgb, 0, 255).astype(np.uint8)
+        )
     else:
         rgb = rgb.astype(np.uint8)
 
@@ -179,8 +201,10 @@ def main() -> None:
         max_lin_vel=args_cli.max_lin_vel,
         max_ang_vel=args_cli.max_ang_vel,
         gripper_cmd=0.0,
-        grasp_z_offset=args_cli.grasp_z_offset,
+        grasp_z_abs=args_cli.grasp_z_abs,
         ibvs_error_threshold=args_cli.ibvs_error_threshold,
+        ibvs_settle_steps=args_cli.ibvs_settle_steps,
+        use_angular=args_cli.use_angular,
         dt=float(getattr(env, "dt", 0.01)),
     )
     policy = IbvsPolicyAdapter(env, controller)

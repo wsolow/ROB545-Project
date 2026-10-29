@@ -1,8 +1,9 @@
 """mj_ibvs_test.py.
 
-Random-init IBVS grasp test under MjViewer: sample a solvable TCP pose
-(block visible in the wrist camera), run IBVS→descend→close→lift, log
-phases / targets, and score success from the pink block's world height.
+Random-init IBVS grasp test under MjViewer: servo the TCP onto an offset
+pose in an XY annulus around the block (still wrist-visible / solvable),
+run IBVS->descend->close->lift, log phases / targets, and score success from
+the pink block's world height.
 
 Written by Will Solow, 2026.
 """
@@ -36,20 +37,49 @@ parser.add_argument(
 parser.add_argument("--block-color", type=str, default="pink", help="HSV preset name.")
 parser.add_argument("--hsv-low", type=int, nargs=3, default=None, metavar=("H", "S", "V"))
 parser.add_argument("--hsv-high", type=int, nargs=3, default=None, metavar=("H", "S", "V"))
-parser.add_argument("--lambda", dest="lambda_gain", type=float, default=0.5, help="IBVS gain λ.")
-parser.add_argument("--z-default", type=float, default=0.4, help="Fallback feature depth (m).")
-parser.add_argument("--max-lin-vel", type=float, default=0.15, help="Max linear TCP speed (m/s).")
-parser.add_argument("--max-ang-vel", type=float, default=0.5, help="Max angular TCP speed (rad/s).")
-parser.add_argument("--grasp-z-offset", type=float, default=0.08, help="World-Z descend after IBVS (m).")
-parser.add_argument("--ibvs-error-threshold", type=float, default=0.05, help="IBVS settle error norm.")
+parser.add_argument("--lambda", dest="lambda_gain", type=float, default=0.8, help="IBVS gain λ.")
+parser.add_argument("--z-default", type=float, default=0.28, help="Fallback feature depth (m).")
+parser.add_argument("--max-lin-vel", type=float, default=0.30, help="Max linear TCP speed (m/s).")
+parser.add_argument("--max-ang-vel", type=float, default=0.15, help="Max angular TCP speed (rad/s).")
+
+parser.add_argument(
+    "--grasp-z-abs",
+    type=float,
+    default=0.03,
+    help="Absolute world-Z ceiling for grasp height (pinch near block).",
+)
+parser.add_argument("--ibvs-error-threshold", type=float, default=0.02, help="IBVS settle error norm.")
+parser.add_argument(
+    "--ibvs-settle-steps",
+    type=int,
+    default=15,
+    help="Consecutive steps below error threshold before DESCEND.",
+)
+parser.add_argument(
+    "--use-angular",
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help="Include IBVS angular DoF (default: translation-only, no tilt).",
+)
 parser.add_argument("--seed", type=int, default=0, help="RNG seed for TCP init.")
 parser.add_argument("--max-init-tries", type=int, default=25, help="Solvable-init retries.")
-parser.add_argument("--xy-noise", type=float, default=0.04, help="TCP XY half-range about block (m).")
+parser.add_argument(
+    "--xy-offset-min",
+    type=float,
+    default=0.05,
+    help="Min TCP XY distance from block center (m); avoids starting directly above.",
+)
+parser.add_argument(
+    "--xy-offset-max",
+    type=float,
+    default=0.10,
+    help="Max TCP XY distance from block center (m); keep block in wrist FOV.",
+)
 parser.add_argument(
     "--z-range",
     type=float,
     nargs=2,
-    default=(0.26, 0.32),
+    default=(0.28, 0.36),
     metavar=("Z_MIN", "Z_MAX"),
     help="TCP Z sample range (m).",
 )
@@ -159,11 +189,21 @@ def sample_solvable_init(
     rng: np.random.Generator,
     block_hsv: BlockHsvCfg,
     *,
-    xy_noise: float,
+    xy_offset_min: float,
+    xy_offset_max: float,
     z_range: tuple[float, float],
     max_tries: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Sample random TCP near the block until the pink block is visible."""
+    """Servo TCP onto an offset pose until the pink block is visible in the wrist camera.
+
+    Samples in a horizontal annulus around the block (radius in
+    ``[xy_offset_min, xy_offset_max]``) so the start is never directly above
+    the block, then accepts only poses where HSV corner extraction succeeds.
+    """
+    r_lo = float(xy_offset_min)
+    r_hi = float(xy_offset_max)
+    if r_lo < 0.0 or r_hi < r_lo:
+        raise ValueError(f"Need 0 <= xy_offset_min <= xy_offset_max, got [{r_lo}, {r_hi}]")
     z_lo, z_hi = float(z_range[0]), float(z_range[1])
     for attempt in range(1, max_tries + 1):
         env.reset()
@@ -172,11 +212,15 @@ def sample_solvable_init(
         for _ in range(10):
             env.step(zero, action_spec=ActionSpec.TWIST_TCP)
 
-        xy = BLOCK_XY + rng.uniform(-xy_noise, xy_noise, size=2)
+        # Polar offset: never land at the block XY (unless min radius is 0).
+        theta = float(rng.uniform(0.0, 2.0 * np.pi))
+        radius = float(rng.uniform(r_lo, r_hi))
+        xy = BLOCK_XY + radius * np.array([np.cos(theta), np.sin(theta)], dtype=np.float64)
         z = float(rng.uniform(z_lo, z_hi))
         target = np.array([xy[0], xy[1], z], dtype=np.float64)
         err = _servo_tcp_xyz(env, target)
         tcp = _tcp_pose_numpy(env)
+        offset_xy = float(np.linalg.norm(tcp[:2] - BLOCK_XY))
         rgbd = env._get_latest_rgbd_wrist()
         if rgbd is None:
             print(f"[init] try {attempt}/{max_tries}: no wrist RGB (tcp_err={err:.3f})")
@@ -187,13 +231,15 @@ def sample_solvable_init(
             print(
                 f"[init] try {attempt}/{max_tries}: block not visible at "
                 f"target=[{target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}] "
-                f"tcp=[{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}]"
+                f"tcp=[{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}] "
+                f"offset_xy={offset_xy:.3f}"
             )
             continue
         print(
             f"[init] accepted try {attempt}/{max_tries}: "
             f"target=[{target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}] "
-            f"tcp=[{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}] servo_err={err:.4f}"
+            f"tcp=[{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}] "
+            f"offset_xy={offset_xy:.3f} servo_err={err:.4f}"
         )
         return target, tcp
 
@@ -234,10 +280,7 @@ class LoggingIbvsPolicy:
         if sp is not None and phase in (GraspPhase.DESCEND, GraspPhase.CLOSE, GraspPhase.LIFT):
             pre = self.controller._pregrasp_pose
             if pre is not None:
-                print(
-                    f"[target] pose setpoint xyz=[{sp[0]:.4f}, {sp[1]:.4f}, {sp[2]:.4f}] "
-                    f"(pregrasp_z={pre[2]:.4f})"
-                )
+                print(f"[target] pose setpoint xyz=[{sp[0]:.4f}, {sp[1]:.4f}, {sp[2]:.4f}] (pregrasp_z={pre[2]:.4f})")
             else:
                 print(f"[target] pose setpoint xyz=[{sp[0]:.4f}, {sp[1]:.4f}, {sp[2]:.4f}]")
         if phase is GraspPhase.DESCEND:
@@ -291,15 +334,15 @@ class LoggingIbvsPolicy:
         if self.step_count % self.log_every == 0 and not self.done:
             block = _block_pose_numpy(self.env)
             sp = self.controller._pose_setpoint
-            sp_str = (
-                f"[{sp[0]:.3f}, {sp[1]:.3f}, {sp[2]:.3f}]" if sp is not None else "None"
-            )
+            sp_str = f"[{sp[0]:.3f}, {sp[1]:.3f}, {sp[2]:.3f}]" if sp is not None else "None"
             err = self.controller._last_error_norm
             err_str = f"{err:.4f}" if err is not None else "n/a"
+            tw = self.controller._last_twist
+            w_norm = float(np.linalg.norm(tw[3:6])) if tw is not None else float("nan")
             print(
                 f"[step {self.step_count:5d}] phase={self.controller.phase.name} "
                 f"tcp=[{tcp_pose[0]:.3f}, {tcp_pose[1]:.3f}, {tcp_pose[2]:.3f}] "
-                f"target={sp_str} ibvs_err={err_str} "
+                f"target={sp_str} ibvs_err={err_str} |w|={w_norm:.4f} "
                 f"block_z={block[2]:.4f}"
             )
 
@@ -353,7 +396,8 @@ def main() -> None:
         env,
         rng,
         block_hsv,
-        xy_noise=args_cli.xy_noise,
+        xy_offset_min=args_cli.xy_offset_min,
+        xy_offset_max=args_cli.xy_offset_max,
         z_range=tuple(args_cli.z_range),
         max_tries=args_cli.max_init_tries,
     )
@@ -375,15 +419,17 @@ def main() -> None:
 
     controller = IBVSController(
         _load_setpoint_rgb(args_cli.setpoint),
-        intrinsics_K=K,
+        intrinsics_k=K,
         block_hsv=block_hsv,
         lambda_gain=args_cli.lambda_gain,
         z_default=args_cli.z_default,
         max_lin_vel=args_cli.max_lin_vel,
         max_ang_vel=args_cli.max_ang_vel,
         gripper_cmd=0.0,
-        grasp_z_offset=args_cli.grasp_z_offset,
+        grasp_z_abs=args_cli.grasp_z_abs,
         ibvs_error_threshold=args_cli.ibvs_error_threshold,
+        ibvs_settle_steps=args_cli.ibvs_settle_steps,
+        use_angular=args_cli.use_angular,
         dt=float(getattr(env, "dt", 0.01)),
     )
     policy = LoggingIbvsPolicy(
@@ -405,7 +451,6 @@ def main() -> None:
         view_wrist=args_cli.wrist_camera,
     ).run()
 
-    # Hard-exit: MuJoCo passive viewer teardown often segfaults with OpenCV windows.
     os._exit(0 if policy.success is True else 1)
 
 

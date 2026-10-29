@@ -272,7 +272,7 @@
     <position class="small_actuator" name="joint_6" joint="joint_6" ctrlrange="-2.0996310901491784 2.0996310901491784"/>
     <position class="small_actuator" name="joint_7" joint="joint_7"/>
     <!-- Gripper: single tendon-based actuator (matches mujoco_menagerie/robotiq_2f85).
-         ctrl=0 → open (driver joints at 0), ctrl=255 → closed (driver joints at 0.8).
+         ctrl=0 -> open (driver joints at 0), ctrl=255 -> closed (driver joints at 0.8).
          gainprm[0] = 0.8 * 100 / 255 ≈ 0.3137255, kp=100 via biasprm. -->
     <general class="2f85" name="fingers_actuator" tendon="fingers_actuator" forcerange="-5 5" ctrlrange="0 255"
       gainprm="0.3137255 0 0" biasprm="0 -100 -10"/>
