@@ -22,11 +22,11 @@ from kinova_lfd.teleop.devices import (
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Keyboard teleoperation for Kortex environments.")
-parser.add_argument("--task", type=str, default="Kortex-UDP-Gen3-v0", help="Environment.")
+parser.add_argument("--task", type=str, default="Kortex-TCP-Gen3-v0", help="Environment.")
 parser.add_argument(
     "--teleop_device",
     type=str,
-    default="keyboard",
+    default="xbox",
     choices={"keyboard", "vr_joystick", "vr_headset", "xbox"},
     help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
 )
@@ -42,7 +42,7 @@ def main() -> None:
 
     Defaults to Kortex-Gen3-v0 environment and passes the twist_tcp Action Specification.
     """
-    env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "dt": 1 / 20, "dry_run": False}
+    env_cfg = {"robot_ip": args_cli.robot_ip, "use_tabletop_camera": False, "dt": 1 / 20}
 
     env = create_env(args_cli.task, env_cfg)
 

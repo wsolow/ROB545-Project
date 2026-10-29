@@ -118,7 +118,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             "    Move X: W/S  Y: A/D  Z: Q/E\n"
             "    Rot  roll: I/K  pitch: J/L  yaw: U/O  gripper: P\n"
             "  Motion (keyboard_ee/gamepad): stock LeRobot translation + gripper\n"
-            "  Keep focus off the MuJoCo window so Simulate letter hotkeys do not fire.\n"
         )
 
         listener, events = init_gen3_recording_listener()

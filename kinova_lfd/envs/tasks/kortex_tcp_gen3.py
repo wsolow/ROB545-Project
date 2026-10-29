@@ -57,7 +57,8 @@ class Gen3KortexTcpEnvCfg(KortexTcpEnvCfg):
 
     arm_joint_names = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"]
 
-
+    dry_run= False
+    
 class Gen3KortexTcpEnv(KortexTcpEnv):
     """Kinova Gen3 7DoF Kortex implementation."""
 
@@ -103,7 +104,7 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
 
         if self.cfg.use_tabletop_camera:
             print("[INFO][RealSense] Instancing TableTop Camera...")
-            self._rs_tabletop_camera = RealsenseCamera(apriltag_size_m=0.1, apriltag_id=self.cfg.base_apriltag_id)
+            self._rs_tabletop_camera = RealsenseCamera()
             print("[INFO][RealSense] Finished Instancing TableTop Camera")
         if self.cfg.use_wrist_camera:
             print("[INFO][Kortex] Instancing Wrist Camera...")

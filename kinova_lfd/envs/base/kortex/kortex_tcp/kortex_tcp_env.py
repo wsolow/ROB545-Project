@@ -57,8 +57,6 @@ class KortexTcpEnv(KortexEnv):
 
     def __del__(self) -> None:
         """Cleanup for the environment."""
-        if self.kortex_connection is not None:
-            self.kortex_connection.close()
         self.close()
 
     def close(self) -> None:
