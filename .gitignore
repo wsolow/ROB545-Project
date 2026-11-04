@@ -9,3 +9,5 @@ kinova_lfd/envs/base/kortex/kortex_cpp_api/
 # LeRobot Gen3 demonstration datasets
 _data/
 lerobot/
+_outputs/
+_logs/
