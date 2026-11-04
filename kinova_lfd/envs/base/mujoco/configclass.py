@@ -12,7 +12,7 @@ import re
 import types
 from collections.abc import Callable, Iterable, Mapping, Sized
 from copy import deepcopy
-from dataclasses import MISSING, Field, dataclass, field, replace
+from dataclasses import MISSING, Field, dataclass, field, is_dataclass, replace
 from typing import Any, ClassVar
 
 import torch
@@ -216,6 +216,16 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
 
                 # ---- 2d) keep tuple/list parity & recurse ----------
                 if isinstance(obj_mem, tuple):
+                    # Hydra/OmegaConf converts tuples of config objects into
+                    # tuples of dictionaries. Preserve the existing config
+                    # objects and update them in place instead of replacing
+                    # them with those dictionaries.
+                    if all(
+                        isinstance(item, Mapping) and is_dataclass(existing) for existing, item in zip(obj_mem, value)
+                    ):
+                        for existing, item in zip(obj_mem, value):
+                            update_class_from_dict(existing, item, _ns=key_ns)
+                        continue
                     value = tuple(value)
                 else:
                     set_obj = True

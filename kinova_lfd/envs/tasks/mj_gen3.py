@@ -21,6 +21,18 @@ from kinova_lfd.envs.base.mujoco.controllers.waypoints import WaypointCfg
 from kinova_lfd.envs.base.mujoco.mj_env import MjDirectRlEnv, MjDirectRlEnvCfg
 
 
+def validate_scene_entities(scene_cfg: SceneCfg, task_name: str) -> None:
+    """Ensure runtime scene entities retain their mjlab configuration types."""
+    invalid_entities = [
+        name for name, entity_cfg in scene_cfg.entities.items() if not isinstance(entity_cfg, EntityCfg)
+    ]
+    if invalid_entities:
+        raise TypeError(
+            f"{task_name} received untyped scene entities: {invalid_entities}. "
+            "Scene entities must be constructed as EntityCfg objects before mjlab scene creation."
+        )
+
+
 @configclass
 class MjGen3EnvCfg(MjDirectRlEnvCfg):
     decimation = 2
@@ -136,6 +148,7 @@ class MjGen3Env(MjDirectRlEnv):
             "robot": get_gen3_robot_cfg(),
             "pink_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="pink_block", rgba=(1.0, 0.4, 0.7, 1.0))),
         }
+        validate_scene_entities(self.cfg.scene, type(self).__name__)
 
         # Initialize scene and simulation.
         self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device)

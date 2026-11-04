@@ -37,7 +37,7 @@ class ObservationManager:
         return torch.cat(list(self.obs.values()), dim=-1)
 
     def obs_from_dict(self, obs: TensorDict) -> torch.Tensor:
-        """Observations from a SkilletEnv tensordict obs spec."""
+        """Observations from a MjDirectRlEnv tensordict obs spec."""
         return torch.cat([obs[v] for v in self.terms if v in obs], dim=1)
 
     def save(self, path: str | Path):

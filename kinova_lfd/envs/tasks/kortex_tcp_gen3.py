@@ -57,8 +57,9 @@ class Gen3KortexTcpEnvCfg(KortexTcpEnvCfg):
 
     arm_joint_names = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"]
 
-    dry_run= False
-    
+    dry_run = False
+
+
 class Gen3KortexTcpEnv(KortexTcpEnv):
     """Kinova Gen3 7DoF Kortex implementation."""
 

@@ -1,0 +1,190 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   kinova_lfd/envs/base/mujoco/configclass.py
+	modified:   kinova_lfd/envs/base/mujoco/controllers/obs_manager.py
+	modified:   kinova_lfd/envs/factory.py
+	modified:   kinova_lfd/envs/tasks/mj_gen3.py
+	modified:   pyproject.toml
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	_logs/
+	_outputs/
+	kinova_lfd/envs/tasks/mj_gen3_lift_cube.py
+	kinova_lfd/rl/
+	scripts/rl/
+	test/
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/kinova_lfd/envs/base/mujoco/configclass.py b/kinova_lfd/envs/base/mujoco/configclass.py
+index bacb01b..589c85e 100644
+--- a/kinova_lfd/envs/base/mujoco/configclass.py
++++ b/kinova_lfd/envs/base/mujoco/configclass.py
+@@ -12,7 +12,7 @@ import re
+ import types
+ from collections.abc import Callable, Iterable, Mapping, Sized
+ from copy import deepcopy
+-from dataclasses import MISSING, Field, dataclass, field, replace
++from dataclasses import MISSING, Field, dataclass, field, is_dataclass, replace
+ from typing import Any, ClassVar
+ 
+ import torch
+@@ -216,6 +216,17 @@ def update_class_from_dict(obj, data: dict[str, Any], _ns: str = "") -> None:
+ 
+                 # ---- 2d) keep tuple/list parity & recurse ----------
+                 if isinstance(obj_mem, tuple):
++                    # Hydra/OmegaConf converts tuples of config objects into
++                    # tuples of dictionaries. Preserve the existing config
++                    # objects and update them in place instead of replacing
++                    # them with those dictionaries.
++                    if all(
++                        isinstance(item, Mapping) and is_dataclass(existing)
++                        for existing, item in zip(obj_mem, value)
++                    ):
++                        for existing, item in zip(obj_mem, value):
++                            update_class_from_dict(existing, item, _ns=key_ns)
++                        continue
+                     value = tuple(value)
+                 else:
+                     set_obj = True
+diff --git a/kinova_lfd/envs/base/mujoco/controllers/obs_manager.py b/kinova_lfd/envs/base/mujoco/controllers/obs_manager.py
+index d5ee4f1..a694443 100644
+--- a/kinova_lfd/envs/base/mujoco/controllers/obs_manager.py
++++ b/kinova_lfd/envs/base/mujoco/controllers/obs_manager.py
+@@ -37,7 +37,7 @@ class ObservationManager:
+         return torch.cat(list(self.obs.values()), dim=-1)
+ 
+     def obs_from_dict(self, obs: TensorDict) -> torch.Tensor:
+-        """Observations from a SkilletEnv tensordict obs spec."""
++        """Observations from a MjDirectRlEnv tensordict obs spec."""
+         return torch.cat([obs[v] for v in self.terms if v in obs], dim=1)
+ 
+     def save(self, path: str | Path):
+diff --git a/kinova_lfd/envs/factory.py b/kinova_lfd/envs/factory.py
+index 89a9473..4484b36 100644
+--- a/kinova_lfd/envs/factory.py
++++ b/kinova_lfd/envs/factory.py
+@@ -5,15 +5,45 @@ from typing import Any
+ from kinova_lfd.envs.base.gym import GymEnv
+ 
+ 
+-def create_env(task_name: str, cfg: dict[str, Any]) -> GymEnv:
+-    """Create a Kortex environment for the given task name and configuration."""
++def _apply_cfg(cfg: object, overrides: dict[str, Any] | object | None) -> object:
++    """Apply configuration overrides to a configclass instance."""
++    if overrides is None:
++        return cfg
++    if isinstance(overrides, dict):
++        if hasattr(cfg, "from_dict"):
++            cfg.from_dict(overrides)
++        else:
++            for key, value in overrides.items():
++                setattr(cfg, key, value)
++        return cfg
++    return overrides
++
++
++def get_env_cfg(task_name: str, overrides: dict[str, Any] | object | None = None) -> object:
++    """Construct the local configuration for a task without using Gym registration."""
++    task_name = task_name.split(":")[-1]
++    if task_name == "Mj-Gen3-v0":
++        from kinova_lfd.envs.tasks.mj_gen3 import MjGen3EnvCfg
++
++        return _apply_cfg(MjGen3EnvCfg(), overrides)
++    if task_name == "Mj-Gen3-LiftCube-v0":
++        from kinova_lfd.envs.tasks.mj_gen3_lift_cube import MjGen3LiftCubeEnvCfg
++
++        return _apply_cfg(MjGen3LiftCubeEnvCfg(), overrides)
++    raise ValueError(f"Invalid task name: {task_name}")
++
++
++def create_env(task_name: str, cfg: dict[str, Any] | object | None = None) -> GymEnv:
++    """Create an environment from the local task catalog and configuration."""
++    task_name = task_name.split(":")[-1]
++    cfg = cfg or {}
+     if task_name == "Kortex-TCP-Gen3-v0":
+         import os
+ 
+         os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+         from kinova_lfd.envs.tasks.kortex_tcp_gen3 import Gen3KortexTcpEnv, Gen3KortexTcpEnvCfg
+ 
+-        env_cfg = Gen3KortexTcpEnvCfg(**cfg)
++        env_cfg = Gen3KortexTcpEnvCfg(**cfg) if isinstance(cfg, dict) else cfg
+         return Gen3KortexTcpEnv(cfg=env_cfg)
+     if task_name == "Kortex-UDP-Gen3-v0":
+         import os
+@@ -21,13 +51,17 @@ def create_env(task_name: str, cfg: dict[str, Any]) -> GymEnv:
+         os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+         from kinova_lfd.envs.tasks.kortex_udp_gen3 import Gen3KortexUdpEnv, Gen3KortexUdpEnvCfg
+ 
+-        env_cfg = Gen3KortexUdpEnvCfg(**cfg)
++        env_cfg = Gen3KortexUdpEnvCfg(**cfg) if isinstance(cfg, dict) else cfg
+         return Gen3KortexUdpEnv(cfg=env_cfg)
+     if task_name == "Mj-Gen3-v0":
+-        from kinova_lfd.envs.tasks.mj_gen3 import MjGen3Env, MjGen3EnvCfg
++        from kinova_lfd.envs.tasks.mj_gen3 import MjGen3Env
+ 
+-        env_cfg = MjGen3EnvCfg()
+-        env_cfg.sim.device = "cuda"
++        env_cfg = get_env_cfg(task_name, cfg)
+         return MjGen3Env(cfg=env_cfg)
++    if task_name == "Mj-Gen3-LiftCube-v0":
++        from kinova_lfd.envs.tasks.mj_gen3_lift_cube import MjGen3LiftCubeEnv
++
++        env_cfg = get_env_cfg(task_name, cfg)
++        return MjGen3LiftCubeEnv(cfg=env_cfg)
+ 
+     raise ValueError(f"Invalid task name: {task_name}")
+diff --git a/kinova_lfd/envs/tasks/mj_gen3.py b/kinova_lfd/envs/tasks/mj_gen3.py
+index ee13131..e73cfe5 100644
+--- a/kinova_lfd/envs/tasks/mj_gen3.py
++++ b/kinova_lfd/envs/tasks/mj_gen3.py
+@@ -21,6 +21,18 @@ from kinova_lfd.envs.base.mujoco.controllers.waypoints import WaypointCfg
+ from kinova_lfd.envs.base.mujoco.mj_env import MjDirectRlEnv, MjDirectRlEnvCfg
+ 
+ 
++def validate_scene_entities(scene_cfg: SceneCfg, task_name: str) -> None:
++    """Ensure runtime scene entities retain their mjlab configuration types."""
++    invalid_entities = [
++        name for name, entity_cfg in scene_cfg.entities.items() if not isinstance(entity_cfg, EntityCfg)
++    ]
++    if invalid_entities:
++        raise TypeError(
++            f"{task_name} received untyped scene entities: {invalid_entities}. "
++            "Scene entities must be constructed as EntityCfg objects before mjlab scene creation."
++        )
++
++
+ @configclass
+ class MjGen3EnvCfg(MjDirectRlEnvCfg):
+     decimation = 2
+@@ -136,6 +148,7 @@ class MjGen3Env(MjDirectRlEnv):
+             "robot": get_gen3_robot_cfg(),
+             "pink_block": EntityCfg(spec_fn=lambda: get_cube_spec(name="pink_block", rgba=(1.0, 0.4, 0.7, 1.0))),
+         }
++        validate_scene_entities(self.cfg.scene, type(self).__name__)
+ 
+         # Initialize scene and simulation.
+         self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device)
+diff --git a/pyproject.toml b/pyproject.toml
+index dd36848..f274512 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -29,7 +29,8 @@ dependencies = [
+     "gymnasium>=1.1",
+     "pynput",
+     "opencv-python",
+-    "zmq"
++    "zmq",
++    "evdev",
+ 
+ ]
+ 
