@@ -4,7 +4,8 @@ import mujoco
 import torch
 from mjlab.entity import EntityCfg
 from mjlab.scene import Scene
-from mjlab.sim.sim import Simulation
+from mjlab.sim import MujocoCfg
+from mjlab.sim.sim import Simulation, SimulationCfg
 
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.tensor_math import (
@@ -21,7 +22,10 @@ from .mj_gen3 import MjGen3Env, MjGen3EnvCfg, validate_scene_entities
 
 @configclass
 class MjGen3LiftCubeEnvCfg(MjGen3EnvCfg):
-    action_scale = 0.5
+    enable_cameras = False
+
+    episode_length_s = 6.0
+    decimation = 2
 
     # reward scales
     min_height = 0.04
@@ -54,6 +58,18 @@ class MjGen3LiftCubeEnvCfg(MjGen3EnvCfg):
     goal_pitch = [0.0, 0.0]
     goal_yaw = [0.0, 0.0]
     cube_goal_ranges = [goal_pos_x, goal_pos_y, goal_pos_z, goal_roll, goal_pitch, goal_yaw]
+
+    sim = SimulationCfg(
+        nconmax=55,
+        njmax=600,
+        mujoco=MujocoCfg(
+            timestep=0.01,
+            iterations=10,
+            ls_iterations=20,
+            impratio=10,
+            cone="elliptic",
+        ),
+    )
 
 
 class MjGen3LiftCubeEnv(MjGen3Env):
@@ -108,6 +124,9 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self.cfg.scene.entities = {"robot": get_gen3_robot_cfg(), "cube": EntityCfg(spec_fn=get_cube_spec)}
         validate_scene_entities(self.cfg.scene, type(self).__name__)
 
+        if not self.cfg.enable_cameras:
+            self.cfg.scene.sensors = ()
+
         # Initialize scene and simulation.
         self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device)
         self.sim = Simulation(
@@ -127,8 +146,9 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self._robot = self.scene.entities["robot"]
         self._cube = self.scene.entities["cube"]
         self._cubes = {"cube": self._cube}
-        self._tabletop_camera = self.scene.sensors["tabletop_camera"]
-        self._wrist_camera = self.scene.sensors["wrist_camera"]
+        if self.cfg.enable_cameras:
+            self._tabletop_camera = self.scene.sensors["tabletop_camera"]
+            self._wrist_camera = self.scene.sensors["wrist_camera"]
 
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None) -> None:
         del action_spec

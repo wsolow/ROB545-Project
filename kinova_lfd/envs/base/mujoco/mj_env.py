@@ -49,6 +49,10 @@ class MjDirectRlEnvCfg:
     scene: SceneCfg = MISSING
     """Scene configuration defining terrain, entities, and sensors. The scene
   specifies ``num_envs``, the number of parallel environments."""
+
+    enable_cameras: bool = True
+    """Whether to execute the scene sensor pipeline during reset and stepping."""
+
     # RL-specific configuration.
 
     episode_length_s: float = MISSING
@@ -225,7 +229,8 @@ class MjDirectRlEnv(GymEnv):
         self._reset_idx(env_ids)
         self.scene.write_data_to_sim()
         self.sim.forward()
-        self.sim.sense()
+        if self.cfg.enable_cameras:
+            self.sim.sense()
         self.obs_buf = self._get_observations()
         return self.obs_buf, self.extras
 
@@ -300,7 +305,8 @@ class MjDirectRlEnv(GymEnv):
         if self.cfg.events and "interval" in self.event_manager.available_modes:
             self.event_manager.apply(mode="interval", dt=self.step_dt)
 
-        self.sim.sense()
+        if self.cfg.enable_cameras:
+            self.sim.sense()
         self.obs_buf = self._get_observations()
 
         self.render()
@@ -329,8 +335,7 @@ class MjDirectRlEnv(GymEnv):
         )
 
     def close(self) -> None:
-        if self._offline_renderer is not None:
-            self._offline_renderer.close()
+        pass
 
     @staticmethod
     def seed(seed: int = -1) -> int:

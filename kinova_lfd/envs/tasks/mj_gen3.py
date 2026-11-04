@@ -170,8 +170,9 @@ class MjGen3Env(MjDirectRlEnv):
             "pink_block": self.scene.entities["pink_block"],
         }
         self._robot = self.scene.entities["robot"]
-        self._tabletop_camera = self.scene.sensors["tabletop_camera"]
-        self._wrist_camera = self.scene.sensors["wrist_camera"]
+        if self.cfg.enable_cameras:
+            self._tabletop_camera = self.scene.sensors["tabletop_camera"]
+            self._wrist_camera = self.scene.sensors["wrist_camera"]
 
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
         if action_spec == ActionSpec.MOVE_TCP:
