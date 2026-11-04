@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 
+from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.mujoco.mj_env import MjDirectRlEnv
 from kinova_lfd.envs.base.seed import configure_seed
@@ -255,7 +256,9 @@ class RslRlVecEnvWrapper(RslRlVecEnv):
         return TensorDict(obs_dict, batch_size=[self.num_envs])
 
     @override
-    def step(self, actions: torch.Tensor) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
+    def step(
+        self, actions: torch.Tensor, action_spec: ActionSpec = None
+    ) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
         # clip actions
         if self._clip_actions is not None:
             actions = torch.clamp(actions, -self._clip_actions, self._clip_actions)

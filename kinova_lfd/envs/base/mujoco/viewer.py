@@ -106,7 +106,7 @@ class MjViewer(NativeMujocoViewer):
         """Refresh camera previews + the passive viewer from the current env state."""
         if self.viewer is None or not self.is_running():
             return
-        self._show_camera_previews()
+        # self._show_camera_previews()
         self.sync_env_to_viewer()
 
     def close_display(self) -> None:
@@ -117,7 +117,7 @@ class MjViewer(NativeMujocoViewer):
 
     def _show_camera_previews(self) -> None:
         """Optionally show wrist / tabletop RGB in OpenCV windows."""
-        self._rgbd_wrist = self.env._get_latest_rgbd_wrist()
+        self._rgbd_wrist = self.env.unwrapped._get_latest_rgbd_wrist()
         if self._view_wrist and self._rgbd_wrist is not None and "rgb" in self._rgbd_wrist:
             wrist_rgb = self._rgbd_wrist["rgb"]
             if isinstance(wrist_rgb, torch.Tensor):
@@ -127,7 +127,7 @@ class MjViewer(NativeMujocoViewer):
             cv2.imshow("RGB Wrist", cv2.cvtColor(wrist_rgb, cv2.COLOR_RGB2BGR))
             cv2.waitKey(1)
 
-        self._rgbd_table = self.env._get_latest_rgbd()
+        self._rgbd_table = self.env.unwrapped._get_latest_rgbd()
         if self._view_tabletop and self._rgbd_table is not None and "rgb" in self._rgbd_table:
             table_rgb = self._rgbd_table["rgb"]
             if isinstance(table_rgb, torch.Tensor):
@@ -145,7 +145,7 @@ class MjViewer(NativeMujocoViewer):
         """
         with torch.no_grad():
             obs = self.env.get_observations()
-            self._show_camera_previews()
+            # self._show_camera_previews()
             if self.policy is not None:
                 if isinstance(self.policy, DeviceBase):
                     actions = self.policy(self.env._robot_tool_pose_b)

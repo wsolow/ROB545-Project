@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from functools import cached_property
 from typing import Any
 
 import numpy as np
 import torch
-
-from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.envs.base.gym import GymEnv
-from kinova_lfd.envs.factory import create_env
 from lerobot.lerobot_types import RobotAction, RobotObservation
 from lerobot.robots.config import RobotConfig
 from lerobot.robots.robot import Robot
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
+
+from kinova_lfd.core.specs import ActionSpec
+from kinova_lfd.envs.base.gym import GymEnv
+from kinova_lfd.envs.factory import create_env
 
 ARM_JOINT_NAMES = ("joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7")
 GRIPPER_NAME = "gripper"
@@ -108,10 +107,6 @@ class Gen3LfDRobot(Robot):
         self._is_connected = False
         self._action_spec = parse_action_spec(getattr(config, "action_spec", ActionSpec.TWIST_TCP))
 
-    @abstractmethod
-    def _env_cfg_dict(self) -> dict[str, Any]:
-        """Keyword args forwarded to ``create_env`` for this backend."""
-
     @property
     def _joint_names(self) -> tuple[str, ...]:
         return (*ARM_JOINT_NAMES, GRIPPER_NAME)
@@ -130,7 +125,7 @@ class Gen3LfDRobot(Robot):
     def _ee_ft(self) -> dict[str, type]:
         if not getattr(self.config, "include_ee_pose", True):
             return {}
-        return {key: float for key in EE_POSE_KEYS}
+        return dict.fromkeys(EE_POSE_KEYS, float)
 
     @property
     def _cameras_ft(self) -> dict[str, tuple[int, int, int]]:
@@ -149,7 +144,7 @@ class Gen3LfDRobot(Robot):
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        return {key: float for key in self._action_keys}
+        return dict.fromkeys(self._action_keys, float)
 
     @property
     def is_connected(self) -> bool:
@@ -169,12 +164,8 @@ class Gen3LfDRobot(Robot):
     def connect(self, calibrate: bool = True) -> None:
         del calibrate  # Not applicable for Gen3 gym backends.
         self.env = create_env(self.task_name, self._env_cfg_dict())
-        self._post_create_env(self.env)
         self.env.reset()
         self._is_connected = True
-
-    def _post_create_env(self, env: GymEnv) -> None:
-        """Optional backend-specific tweaks after ``create_env``."""
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:

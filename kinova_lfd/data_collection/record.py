@@ -22,10 +22,11 @@ from .factories import make_robot, make_teleop, register_gen3_robots
 from .keyboard_controls import init_gen3_recording_listener
 from .processors import make_gen3_teleop_action_processor, make_identity_robot_action_processor
 from .record_loop import record_loop
+from .success import cube_goal_success
 
 
 def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
-    """Record teleoperated Gen3 demonstrations into a LeRobotDataset under ``_data/``."""
+    """Record Gen3 demonstrations from a teleoperator or an RSL-RL policy."""
     init_logging()
     register_gen3_robots()
     logging.info(pformat(cfg))
@@ -34,10 +35,21 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
         init_visualization("rerun", session_name="gen3_recording")
 
     robot = make_robot(cfg.robot)
-    teleop = make_teleop(cfg.teleop)
+    if cfg.teleop is not None and cfg.policy is not None:
+        raise ValueError("Configure exactly one action source: teleop or policy.")
+    if cfg.teleop is None and cfg.policy is None:
+        raise ValueError("Configure an action source: teleop or policy.")
+    teleop = make_teleop(cfg.teleop) if cfg.teleop is not None else None
+    if cfg.policy is not None:
+        from .policy import RslRlPolicySource
+
+        policy_source = RslRlPolicySource(cfg.policy, robot)
+    else:
+        policy_source = None
+    action_source = policy_source or teleop
 
     # gen3_keyboard already emits TWIST_TCP; stock keyboard_ee / gamepad need delta->twist.
-    if teleop_emits_twist_tcp(cfg.teleop):
+    if policy_source is not None or teleop_emits_twist_tcp(cfg.teleop):
         teleop_action_processor = make_identity_robot_action_processor()
     else:
         teleop_action_processor = make_gen3_teleop_action_processor(linear_scale=cfg.linear_scale)
@@ -93,8 +105,12 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 streaming_encoding=dataset_cfg.streaming_encoding,
             )
 
-        teleop.connect()
         robot.connect()
+        if policy_source is not None:
+            policy_source.connect()
+        else:
+            assert teleop is not None
+            teleop.connect()
 
         if cfg.view_mujoco and getattr(robot, "name", None) == "mj_gen3" and robot.env is not None:
             from kinova_lfd.envs.base.mujoco.viewer import MjViewer
@@ -109,16 +125,18 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             mj_viewer.open_display()
             print("[record] MuJoCo viewer opened (syncs each control step).")
 
-        print(
-            "\nRecording controls:\n"
-            "  ] / Enter / gamepad success  -> end episode & save\n"
-            "  [         / gamepad rerecord -> discard & rerecord\n"
-            "  Esc       / gamepad failure  -> stop session\n"
-            "  Motion (gen3_keyboard):\n"
-            "    Move X: W/S  Y: A/D  Z: Q/E\n"
-            "    Rot  roll: I/K  pitch: J/L  yaw: U/O  gripper: P\n"
-            "  Motion (keyboard_ee/gamepad): stock LeRobot translation + gripper\n"
-        )
+        if policy_source is None:
+            print(
+                "\nRecording controls:\n"
+                "  ] / Enter / gamepad success  -> end episode & save\n"
+                "  [         / gamepad rerecord -> discard & rerecord\n"
+                "  Esc       / gamepad failure  -> stop session\n"
+                "  Motion (gen3_keyboard):\n"
+                "    Move X: W/S  Y: A/D  Z: Q/E  Rot: I/K J/L U/O  gripper: P\n"
+                "  Motion (keyboard_ee/gamepad): stock LeRobot translation + gripper\n"
+            )
+        else:
+            print("\nRecording policy episodes; only cube-goal successes will be saved. Esc stops.")
 
         listener, events = init_gen3_recording_listener()
 
@@ -135,6 +153,7 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     robot_action_processor=robot_action_processor,
                     robot_observation_processor=robot_observation_processor,
                     teleop=teleop,
+                    action_source=action_source,
                     dataset=dataset,
                     control_time_s=dataset_cfg.episode_time_s,
                     single_task=dataset_cfg.single_task,
@@ -143,8 +162,20 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     mj_viewer=mj_viewer,
                 )
 
-                if not events["stop_recording"] and (
-                    (recorded_episodes < dataset_cfg.num_episodes - 1) or events["rerecord_episode"]
+                if events["stop_recording"]:
+                    dataset.clear_episode_buffer()
+                    break
+
+                policy_success = policy_source is not None and _policy_episode_succeeded(
+                    robot, cfg.policy.success_delta if cfg.policy is not None else 0.05
+                )
+                if policy_source is not None and not events["stop_recording"] and not policy_success:
+                    events["rerecord_episode"] = True
+
+                if (
+                    policy_source is None
+                    and not events["stop_recording"]
+                    and ((recorded_episodes < dataset_cfg.num_episodes - 1) or events["rerecord_episode"])
                 ):
                     log_say("Reset the environment", cfg.play_sounds)
                     record_loop(
@@ -166,12 +197,25 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     events["rerecord_episode"] = False
                     events["exit_early"] = False
                     dataset.clear_episode_buffer()
+                    if policy_source is not None:
+                        assert robot.env is not None
+                        robot.env.reset()
+                        policy_source.on_episode_end()
                     timer.log_episode_summary("discarded episode")
+                    timer.restart()
+                    continue
+
+                if not dataset.has_pending_frames():
+                    logging.warning("Skipping episode %s because it contains no recorded frames.", episode_index)
+                    dataset.clear_episode_buffer()
+                    timer.log_episode_summary("discarded empty episode")
                     timer.restart()
                     continue
 
                 dataset.save_episode()
                 recorded_episodes += 1
+                if policy_source is not None:
+                    policy_source.on_episode_end()
                 timer.log_episode_summary(f"episode {episode_index}")
                 timer.restart()
     finally:
@@ -186,8 +230,10 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
 
         if robot.is_connected:
             robot.disconnect()
-        if teleop.is_connected:
+        if teleop is not None and teleop.is_connected:
             teleop.disconnect()
+        if policy_source is not None and policy_source.is_connected:
+            policy_source.disconnect()
 
         if listener is not None:
             listener.stop()
@@ -202,3 +248,13 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
 
     assert dataset is not None
     return dataset
+
+
+def _policy_episode_succeeded(robot: object, success_delta: float) -> bool:
+    """Return whether the final lift-cube position is within ``success_delta``."""
+    env = getattr(robot, "env", None)
+    cube_pose = getattr(env, "last_cube_pose_w", getattr(env, "cube_pose_w", None))
+    goal_pose = getattr(env, "last_cube_goal_pose_w", getattr(env, "cube_goal_pose_w", None))
+    if cube_pose is None or goal_pose is None:
+        raise TypeError("Automatic policy success is only supported by MjGen3LiftCubeEnv.")
+    return cube_goal_success(cube_pose, goal_pose, success_delta)

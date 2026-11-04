@@ -21,6 +21,7 @@ import sys
 from kinova_lfd.data_collection import (
     Gen3DatasetConfig,
     Gen3RecordConfig,
+    find_available_dataset_name,
     make_robot_config,
     make_teleop_config,
     record,
@@ -124,6 +125,10 @@ def main(argv: list[str] | None = None) -> int:
         teleop_overrides["use_gripper"] = True
 
     dataset_name = args.dataset_name
+    if not args.resume:
+        dataset_name = find_available_dataset_name(dataset_name)
+        if dataset_name != args.dataset_name:
+            print(f"Dataset {args.dataset_name!r} already exists; using {dataset_name!r}.")
     repo_id = args.repo_id or f"local/{dataset_name}"
 
     cfg = Gen3RecordConfig(

@@ -145,7 +145,7 @@ class MjDirectRlEnv(GymEnv):
 
         # Initialize RL-specific state.
         self.common_step_counter = 0
-        self.episode_length_buf = torch.zeros(cfg.scene.num_envs, device=cfg.sim.device, dtype=torch.long)
+        self.episode_length_buf = torch.zeros(cfg.scene.num_envs, device=self.device, dtype=torch.long)
         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.reset_terminated = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.reset_time_outs = torch.zeros_like(self.reset_terminated)

@@ -13,6 +13,8 @@ class MjGen3RobotConfig(RobotConfig):
     """Config for wrapping ``Mj-Gen3-v0`` as a LeRobot ``Robot``."""
 
     device: str = "cuda"
+    task_name: str = "Mj-Gen3-v0"
+    enable_cameras: bool = True
 
     # Observation modalities (Mj scene always has both cameras; flags gate obs)
     use_wrist_camera: bool = True

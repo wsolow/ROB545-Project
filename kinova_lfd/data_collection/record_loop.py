@@ -29,6 +29,7 @@ def record_loop(
     robot_observation_processor: RobotProcessorPipeline[RobotObservation, RobotObservation],
     dataset: LeRobotDataset | None = None,
     teleop: Teleoperator | None = None,
+    action_source: Any | None = None,
     control_time_s: float | None = None,
     single_task: str | None = None,
     display_data: bool = False,
@@ -53,6 +54,7 @@ def record_loop(
 
     timestamp = 0.0
     start_episode_t = time.perf_counter()
+    source = action_source if action_source is not None else teleop
     while timestamp < control_time_s:
         if events.get("exit_early"):
             events["exit_early"] = False
@@ -69,14 +71,14 @@ def record_loop(
                 observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
 
         with timer.section("teleop"):
-            if teleop is None:
+            if source is None:
                 timer.wait()
                 timestamp = time.perf_counter() - start_episode_t
                 continue
 
             # Merge gamepad teleop episode events into the shared events dict when available.
-            if hasattr(teleop, "get_teleop_events"):
-                tevents = teleop.get_teleop_events()
+            if hasattr(source, "get_teleop_events"):
+                tevents = source.get_teleop_events()
                 from lerobot.teleoperators.utils import TeleopEvents
 
                 if tevents.get(TeleopEvents.TERMINATE_EPISODE) or tevents.get(TeleopEvents.SUCCESS):
@@ -85,7 +87,7 @@ def record_loop(
                     events["rerecord_episode"] = True
                     events["exit_early"] = True
 
-            act = teleop.get_action()
+            act = source.get_action()
             act_processed = teleop_action_processor((act, obs))
             robot_action_to_send = robot_action_processor((act_processed, obs))
 

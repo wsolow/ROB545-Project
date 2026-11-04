@@ -1,6 +1,14 @@
 """Gen3 demonstration recording on top of LeRobot robots + teleops."""
 
-from .configs import Gen3DatasetConfig, Gen3RecordConfig, make_robot_config, make_teleop_config
+from .configs import (
+    Gen3DatasetConfig,
+    Gen3RecordConfig,
+    RslRlPolicyConfig,
+    find_available_dataset_name,
+    make_policy_config,
+    make_robot_config,
+    make_teleop_config,
+)
 from .factories import make_robot, make_teleop, register_gen3_robots
 from .record import record
 from .teleop import Gen3KeyboardTeleop, Gen3KeyboardTeleopConfig
@@ -10,6 +18,9 @@ __all__ = [
     "Gen3KeyboardTeleop",
     "Gen3KeyboardTeleopConfig",
     "Gen3RecordConfig",
+    "RslRlPolicyConfig",
+    "find_available_dataset_name",
+    "make_policy_config",
     "make_robot",
     "make_robot_config",
     "make_teleop",

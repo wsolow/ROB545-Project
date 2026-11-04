@@ -59,12 +59,24 @@ class Gen3DatasetConfig:
         )
 
 
+def find_available_dataset_name(dataset_name: str, root: Path | None = None) -> str:
+    """Return ``dataset_name`` or the next unused suffixed name."""
+    data_root = Path("_data") if root is None else Path(root)
+    candidate = dataset_name
+    suffix = 0
+    while (data_root / candidate).exists():
+        suffix += 1
+        candidate = f"{dataset_name}_{suffix}"
+    return candidate
+
+
 @dataclass
 class Gen3RecordConfig:
-    """Top-level recording config for Mj / Kortex Gen3 + Gen3/stock teleops."""
+    """Top-level recording config for a Gen3 teleoperator or RSL-RL policy."""
 
     robot: RobotConfig = field(default_factory=MjGen3RobotConfig)
-    teleop: TeleoperatorConfig = field(default_factory=lambda: make_teleop_config("gen3_keyboard"))
+    teleop: TeleoperatorConfig | None = field(default_factory=lambda: make_teleop_config("gen3_keyboard"))
+    policy: "RslRlPolicyConfig | None" = None
     dataset: Gen3DatasetConfig = field(default_factory=Gen3DatasetConfig)
     # Scales teleop delta_x/y/z into TCP linear twist (m/s-ish).
     linear_scale: float = 0.15
@@ -75,6 +87,23 @@ class Gen3RecordConfig:
     view_mujoco: bool = True
     view_wrist: bool = True
     view_tabletop: bool = True
+
+
+@dataclass
+class RslRlPolicyConfig:
+    """Checkpoint and inference settings for an RSL-RL action source."""
+
+    checkpoint: Path
+    task: str = "Mj-Gen3-LiftCube-v0"
+    agent: str = "rsl_rl_cfg_entry_point"
+    device: str = "cuda"
+    clip_actions: float | None = None
+    success_delta: float = 0.05
+
+
+def make_policy_config(checkpoint: str | Path, **overrides: object) -> RslRlPolicyConfig:
+    """Build policy settings from a checkpoint path."""
+    return RslRlPolicyConfig(checkpoint=Path(checkpoint), **overrides)
 
 
 def make_robot_config(robot_type: str, **overrides) -> RobotConfig:
@@ -101,6 +130,6 @@ def make_teleop_config(teleop_type: str, *, use_gripper: bool = True, **override
     raise ValueError(f"Unknown teleop type {teleop_type!r}. Use 'gen3_keyboard', 'keyboard_ee', or 'gamepad'.")
 
 
-def teleop_emits_twist_tcp(teleop: TeleoperatorConfig) -> bool:
+def teleop_emits_twist_tcp(teleop: TeleoperatorConfig | None) -> bool:
     """True if the teleop already produces Gen3 TWIST_TCP action keys."""
-    return getattr(teleop, "type", None) == "gen3_keyboard"
+    return teleop is not None and getattr(teleop, "type", None) == "gen3_keyboard"
