@@ -130,7 +130,8 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 "\nRecording controls:\n"
                 "  ] / Enter / gamepad success  -> end episode & save\n"
                 "  [         / gamepad rerecord -> discard & rerecord\n"
-                "  Esc       / gamepad failure  -> stop session\n"
+                "  R         -> reset environment and discard current episode\n"
+                "  Esc       / gamepad failure  -> reset environment and stop session\n"
                 "  Motion (gen3_keyboard):\n"
                 "    Move X: W/S  Y: A/D  Z: Q/E  Rot: I/K J/L U/O  gripper: P\n"
                 "  Motion (keyboard_ee/gamepad): stock LeRobot translation + gripper\n"
@@ -161,6 +162,17 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     timer=timer,
                     mj_viewer=mj_viewer,
                 )
+
+                if events["reset_environment"]:
+                    dataset.clear_episode_buffer()
+                    _reset_robot_and_action_source(robot, teleop, policy_source)
+                    events["reset_environment"] = False
+                    events["exit_early"] = False
+                    timer.log_episode_summary("reset episode")
+                    timer.restart()
+                    if events["stop_recording"]:
+                        break
+                    continue
 
                 if events["stop_recording"]:
                     dataset.clear_episode_buffer()
@@ -220,7 +232,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 timer.restart()
     finally:
         timer.log_run_summary()
-        log_say("Stop recording", cfg.play_sounds, blocking=True)
 
         if mj_viewer is not None:
             mj_viewer.close_display()
@@ -244,10 +255,33 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
         if dataset_cfg.push_to_hub and dataset is not None and dataset.num_episodes > 0:
             dataset.push_to_hub()
 
-        log_say("Exiting", cfg.play_sounds)
+        # Perform all resource cleanup before optional speech. Blocking audio
+        # must not delay shutdown after Ctrl+C or a closed MuJoCo window.
+        log_say("Stop recording", cfg.play_sounds, blocking=False)
+        log_say("Exiting", cfg.play_sounds, blocking=False)
 
     assert dataset is not None
     return dataset
+
+
+def _reset_robot_and_action_source(robot: object, teleop: object | None, policy_source: object | None) -> None:
+    """Reset the environment and clear any state held by the action source."""
+    env = getattr(robot, "env", None)
+    reset = getattr(env, "reset", None)
+    if callable(reset):
+        reset()
+    else:
+        logging.warning("Reset requested, but the active robot has no resettable environment.")
+
+    if teleop is not None:
+        teleop_reset = getattr(teleop, "reset", None)
+        if callable(teleop_reset):
+            teleop_reset()
+
+    if policy_source is not None:
+        policy_reset = getattr(policy_source, "on_episode_end", None)
+        if callable(policy_reset):
+            policy_reset()
 
 
 def _policy_episode_succeeded(robot: object, success_delta: float) -> bool:

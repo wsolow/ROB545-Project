@@ -23,7 +23,7 @@ def apply_gen3_recording_control(control: str, events: dict[str, bool]) -> None:
     """Map recording control keys onto the shared events dict.
 
     ``control`` is one of ``"end"`` (``]`` / Enter), ``"rerecord"`` (``[``),
-    or ``"stop"`` (Esc).
+    ``"reset"`` (R), or ``"stop"`` (Esc).
     """
     if control == "end":
         print("']' / Enter pressed. Ending episode and saving...")
@@ -35,11 +35,16 @@ def apply_gen3_recording_control(control: str, events: dict[str, bool]) -> None:
     elif control == "stop":
         print("Escape pressed. Stopping data recording...")
         events["stop_recording"] = True
+        events["reset_environment"] = True
+        events["exit_early"] = True
+    elif control == "reset":
+        print("R pressed. Resetting environment and discarding episode...")
+        events["reset_environment"] = True
         events["exit_early"] = True
 
 
 def init_gen3_recording_listener() -> tuple[Any | None, dict[str, bool]]:
-    """Start a pynput listener for ``[`` / ``]`` / Enter / Esc episode controls.
+    """Start a pynput listener for ``[`` / ``]`` / Enter / Esc / R controls.
 
     These keys do not overlap WASD/QE/IK/JL/UO/P motion. Returns
     ``(listener, events)``. ``listener`` may be ``None`` if capture is
@@ -49,6 +54,7 @@ def init_gen3_recording_listener() -> tuple[Any | None, dict[str, bool]]:
         "exit_early": False,
         "rerecord_episode": False,
         "stop_recording": False,
+        "reset_environment": False,
     }
 
     if not (PYNPUT_AVAILABLE and pynput_can_capture() and pynput_keyboard is not None):
@@ -72,6 +78,8 @@ def init_gen3_recording_listener() -> tuple[Any | None, dict[str, bool]]:
             apply_gen3_recording_control("end", events)
         elif ch == "[":
             apply_gen3_recording_control("rerecord", events)
+        elif ch == "r":
+            apply_gen3_recording_control("reset", events)
 
     listener = pynput_keyboard.Listener(on_press=_on_press)
     listener.start()

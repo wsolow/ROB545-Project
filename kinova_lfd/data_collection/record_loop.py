@@ -87,6 +87,10 @@ def record_loop(
                     events["rerecord_episode"] = True
                     events["exit_early"] = True
 
+            if events.get("exit_early"):
+                events["exit_early"] = False
+                break
+
             act = source.get_action()
             act_processed = teleop_action_processor((act, obs))
             robot_action_to_send = robot_action_processor((act_processed, obs))
@@ -96,7 +100,11 @@ def record_loop(
 
         if mj_viewer is not None:
             with timer.section("viewer"):
-                mj_viewer.sync_display()
+                if not mj_viewer.sync_display():
+                    logger.info("MuJoCo viewer closed; stopping recording.")
+                    events["stop_recording"] = True
+                    events["exit_early"] = True
+                    break
 
         if dataset is not None:
             with timer.section("record"):

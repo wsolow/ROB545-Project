@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", type=str, default="cuda", help="Torch device for the policy.")
     parser.add_argument("--steps", type=int, default=80000, help="Training steps.")
     parser.add_argument("--batch-size", type=int, default=4, help="Batch size (default 4 for 12GB GPUs).")
-    parser.add_argument("--save-freq", type=int, default=100, help="Checkpoint every N steps.")
+    parser.add_argument("--save-freq", type=int, default=10000, help="Checkpoint every N steps.")
     parser.add_argument("--seed", type=int, default=1000, help="Training seed.")
     parser.add_argument("--num-workers", type=int, default=2, help="DataLoader workers.")
     parser.add_argument("--log-freq", type=int, default=200, help="Log every N steps.")

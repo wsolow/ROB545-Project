@@ -22,7 +22,7 @@ and then execute a pre-defined grasp.
 Imitation learning is built upon the LeRobot package which provides nice support for dataset configs and is widely used. Right now we are assuming that LeRobot is v0.6.2. To install: 
 ```git clone https://github.com/huggingface/lerobot.git```
 and then install with pip
-```pip install -e 'lerobot[training,dataset,diffusion]```
+```pip install -e 'lerobot[training,dataset,diffusion]'```
 
 To test the recording script in Mujoco, run:
 ```python3 scripts/record_gen3.py``` 

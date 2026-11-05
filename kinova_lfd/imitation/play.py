@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 from lerobot.policies import make_pre_post_processors
-from lerobot.policies.diffusion import DiffusionPolicy
+from lerobot.policies.diffusion import DiffusionConfig, DiffusionPolicy
 from lerobot.processor import PolicyProcessorPipeline
 
 from .dataset import filter_dataset_features, resolve_local_dataset
@@ -55,7 +55,14 @@ def load_diffusion_policy(
     (smaller = faster replans; checkpoint default is often 100 DDPM steps).
     """
     pretrained_dir = resolve_pretrained_dir(checkpoint)
-    policy = DiffusionPolicy.from_pretrained(str(pretrained_dir))
+    # The serialized training config may contain the training device (typically
+    # CUDA). Override it before loading safetensors so an explicit rollout
+    # device also controls weight placement during deserialization.
+    policy_config = DiffusionConfig.from_pretrained(
+        str(pretrained_dir),
+        cli_overrides=[f"--device={device}"],
+    )
+    policy = DiffusionPolicy.from_pretrained(str(pretrained_dir), config=policy_config)
     policy.config.device = device
     policy.to(device)
     policy.eval()

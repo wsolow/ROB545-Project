@@ -232,10 +232,12 @@ class MjGen3Env(MjDirectRlEnv):
         joint_vel = torch.zeros_like(joint_pos)
         self.robot.set_joint_position_target(joint_pos, env_ids=env_ids.unsqueeze(-1), joint_ids=self.cfg.joint_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids, joint_ids=self.cfg.joint_ids)
+        self._diff_ik.reset()
+        self.robot_dof_targets = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
 
         # Cubes
         self._init_cube_poses = {
-            "pink_block": [0.35, 0, 0.021],
+            "pink_block": [0.42, 0, 0.02],
         }
         for cube in self._cubes:
             self._cubes[cube].write_root_link_pose_to_sim(

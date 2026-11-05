@@ -17,6 +17,7 @@ from kinova_lfd.core.tensor_math import (
 )
 from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
 from kinova_lfd.envs.base.mujoco.configclass import configclass
+from kinova_lfd.envs.tasks.lift_cube_curriculum import LiftCubeCurriculumCfg, LiftCubeCurriculumManager
 
 from .mj_gen3 import MjGen3Env, MjGen3EnvCfg, validate_scene_entities
 
@@ -41,6 +42,8 @@ class MjGen3LiftCubeEnvCfg(MjGen3EnvCfg):
     cube_goal_fine_grained_std = 0.05
     action_rate_reward_scale = -0.0001
     joint_vel_reward_scale = -0.0001
+    cube_goal_distance_threshold = 0.03
+    curriculum = LiftCubeCurriculumCfg()
 
     # Keep the arm in a deterministic, camera-facing ready pose.  The final
     # entry is the gripper command and is repeated in ``joint_ids``.
@@ -102,6 +105,7 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self.last_cube_goal_pose_w = torch.zeros((self.num_envs, 7), device=self.device)
         self.robot_tcp_pose_w = torch.zeros((self.num_envs, 7), device=self.device)
         self.robot_ee_pose_w = torch.zeros((self.num_envs, 7), device=self.device)
+        self.curriculum_manager = LiftCubeCurriculumManager(self.cfg.curriculum)
 
     def _setup_scene(self):
         def get_cube_spec(cube_size: float = 0.025, mass: float = 0.06) -> mujoco.MjSpec:
@@ -177,11 +181,17 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self.last_cube_pose_w.copy_(self.cube_pose_w)
         self.last_cube_goal_pose_w.copy_(self.cube_goal_pose_w)
         truncated = self.episode_length_buf >= self.max_episode_length - 1
-        terminated = (self.cube_pose_w[:, 2] < -0.05) | torch.isnan(self.robot.data.body_link_pose_w).any(dim=(1, 2))
+        cube_goal_distance = torch.norm(self.cube_goal_pose_w[:, 0:3] - self.cube_pose_w[:, 0:3], dim=1)
+        terminated = (
+            (self.cube_pose_w[:, 2] < -0.05)
+            | (cube_goal_distance <= self.cfg.cube_goal_distance_threshold)
+            | torch.isnan(self.robot.data.body_link_pose_w).any(dim=(1, 2))
+        )
         return terminated.to(torch.bool), truncated
 
     def _get_rewards(self) -> torch.Tensor:
         self._compute_intermediate_values()
+        curriculum_values = self.curriculum_manager.values(self.common_step_counter)
         rewards = torch.nan_to_num(
             compute_rewards(
                 self.actions,
@@ -192,18 +202,19 @@ class MjGen3LiftCubeEnv(MjGen3Env):
                 self.cube_pose_w[:, 0:3],
                 self.cube_goal_pose_w[:, 0:3],
                 self.cfg.min_height,
-                self.cfg.cube_reach_reward_scale,
+                curriculum_values["cube_reach_reward_scale"],
                 self.cfg.cube_reach_reward_std,
-                self.cfg.cube_lift_reward_scale,
-                self.cfg.cube_goal_reward_scale,
+                curriculum_values["cube_lift_reward_scale"],
+                curriculum_values["cube_goal_reward_scale"],
                 self.cfg.cube_goal_reward_std,
-                self.cfg.cube_goal_fine_grained_scale,
+                curriculum_values["cube_goal_fine_grained_scale"],
                 self.cfg.cube_goal_fine_grained_std,
-                self.cfg.action_rate_reward_scale,
-                self.cfg.joint_vel_reward_scale,
+                curriculum_values["action_rate_reward_scale"],
+                curriculum_values["joint_vel_reward_scale"],
             ),
             nan=0.0,
         )
+        self.extras.setdefault("log", {}).update(self.curriculum_manager.log_values(self.common_step_counter))
         self.prev_actions[:] = self.actions
         return rewards
 

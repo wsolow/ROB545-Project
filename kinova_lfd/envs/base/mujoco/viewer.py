@@ -1,8 +1,11 @@
+import logging
+import threading
 from collections.abc import Callable
 from typing import override
 
 import cv2
 import mujoco
+import numpy as np
 import torch
 from mjlab.viewer import NativeMujocoViewer
 from mjlab.viewer.base import (
@@ -19,6 +22,26 @@ from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.teleop.devices.device_base import DeviceBase
 
+logger = logging.getLogger(__name__)
+
+
+def _as_preview_image(rgb: object) -> np.ndarray:
+    """Convert an RGB tensor/array to an HWC uint8 image for the preview thread."""
+    if isinstance(rgb, torch.Tensor):
+        rgb = rgb.detach().cpu().numpy()
+    image = np.asarray(rgb).squeeze()
+    if image.ndim == 3 and image.shape[0] == 3:
+        image = image.transpose(1, 2, 0)
+    if image.ndim != 3 or image.shape[-1] != 3:
+        raise ValueError(f"Expected RGB image with shape (H, W, 3), got {image.shape}")
+    if np.issubdtype(image.dtype, np.floating):
+        if float(np.nanmax(image)) <= 1.0 + 1e-3:
+            image = image * 255.0
+        image = np.clip(image, 0, 255).astype(np.uint8)
+    else:
+        image = image.astype(np.uint8, copy=False)
+    return np.ascontiguousarray(image)
+
 
 class MjViewer(NativeMujocoViewer):
     def __init__(
@@ -33,6 +56,7 @@ class MjViewer(NativeMujocoViewer):
         view_wrist: bool = True,
         view_tabletop: bool = True,
         ignore_mjlab_keys: bool = False,
+        preview_fps: float = 20.0,
     ):
         super().__init__(env, policy, frame_rate, key_callback, plot_cfg, enable_perturbations, verbosity)
         if isinstance(self.policy, DeviceBase):
@@ -42,6 +66,11 @@ class MjViewer(NativeMujocoViewer):
         self._ignore_mjlab_keys = ignore_mjlab_keys
         self._rgbd_wrist = None
         self._rgbd_table = None
+        self._preview_fps = preview_fps
+        self._preview_stop = threading.Event()
+        self._preview_lock = threading.Lock()
+        self._preview_thread: threading.Thread | None = None
+        self._viewer_closed = False
 
     @override
     def setup(self) -> None:
@@ -82,6 +111,15 @@ class MjViewer(NativeMujocoViewer):
         if self.enable_perturbations:
             self.log("[INFO] Interactive perturbations enabled", VerbosityLevel.INFO)
 
+        if (self._view_wrist or self._view_tabletop) and self._preview_thread is None:
+            self._preview_stop.clear()
+            self._preview_thread = threading.Thread(
+                target=self._preview_loop,
+                name="gen3-camera-preview",
+                daemon=True,
+            )
+            self._preview_thread.start()
+
     @override
     def _safe_key_callback(self, key: int) -> None:
         # During recording, skip mjlab Enter/P/Space/etc. so they do not reset
@@ -102,40 +140,100 @@ class MjViewer(NativeMujocoViewer):
         """
         self.setup()
 
-    def sync_display(self) -> None:
-        """Refresh camera previews + the passive viewer from the current env state."""
+    def sync_display(self) -> bool:
+        """Submit camera previews and refresh the passive viewer without waiting for GUI work."""
         if self.viewer is None or not self.is_running():
-            return
-        # self._show_camera_previews()
+            self._viewer_closed = True
+            self._close_camera_preview()
+            return False
+        self._update_camera_previews()
         self.sync_env_to_viewer()
+        return True
 
     def close_display(self) -> None:
-        """Close the passive viewer and any OpenCV preview windows."""
-        self.close()
-        if self._view_wrist or self._view_tabletop:
-            cv2.destroyAllWindows()
+        """Close the passive viewer and terminate the camera preview thread."""
+        try:
+            self._close_camera_preview()
+        finally:
+            self.close()
 
-    def _show_camera_previews(self) -> None:
-        """Optionally show wrist / tabletop RGB in OpenCV windows."""
-        self._rgbd_wrist = self.env.unwrapped._get_latest_rgbd_wrist()
-        if self._view_wrist and self._rgbd_wrist is not None and "rgb" in self._rgbd_wrist:
-            wrist_rgb = self._rgbd_wrist["rgb"]
-            if isinstance(wrist_rgb, torch.Tensor):
-                wrist_rgb = wrist_rgb.squeeze().detach().cpu().numpy()
-            if wrist_rgb.ndim == 3 and wrist_rgb.shape[0] == 3:
-                wrist_rgb = wrist_rgb.transpose(1, 2, 0)
-            cv2.imshow("RGB Wrist", cv2.cvtColor(wrist_rgb, cv2.COLOR_RGB2BGR))
-            cv2.waitKey(1)
+    @property
+    def viewer_closed(self) -> bool:
+        """Whether the MuJoCo window was closed by the user."""
+        return self._viewer_closed
 
-        self._rgbd_table = self.env.unwrapped._get_latest_rgbd()
-        if self._view_tabletop and self._rgbd_table is not None and "rgb" in self._rgbd_table:
-            table_rgb = self._rgbd_table["rgb"]
-            if isinstance(table_rgb, torch.Tensor):
-                table_rgb = table_rgb.squeeze().detach().cpu().numpy()
-            if table_rgb.ndim == 3 and table_rgb.shape[0] == 3:
-                table_rgb = table_rgb.transpose(1, 2, 0)
-            cv2.imshow("RGB Tabletop", cv2.cvtColor(table_rgb, cv2.COLOR_RGB2BGR))
-            cv2.waitKey(1)
+    def _close_camera_preview(self) -> None:
+        """Stop the camera preview thread; safe to call repeatedly."""
+        self._preview_stop.set()
+        thread = self._preview_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+            if thread.is_alive():
+                logger.warning("Camera preview thread did not stop within the shutdown timeout")
+            else:
+                self._preview_thread = None
+        else:
+            self._preview_thread = None
+
+        with self._preview_lock:
+            self._rgbd_wrist = None
+            self._rgbd_table = None
+
+    def _update_camera_previews(self) -> None:
+        """Publish the latest RGB-D references for the preview thread."""
+        rgbd_wrist = None
+        rgbd_table = None
+        if self._view_wrist:
+            rgbd_wrist = self.env.unwrapped._get_latest_rgbd_wrist()
+
+        if self._view_tabletop:
+            rgbd_table = self.env.unwrapped._get_latest_rgbd()
+
+        with self._preview_lock:
+            if self._view_wrist:
+                self._rgbd_wrist = rgbd_wrist
+            if self._view_tabletop:
+                self._rgbd_table = rgbd_table
+
+    def _preview_loop(self) -> None:
+        """Display the latest RGB-D frames on a dedicated OpenCV thread."""
+        try:
+            if self._view_wrist:
+                cv2.namedWindow("RGB Wrist", cv2.WINDOW_AUTOSIZE)
+            if self._view_tabletop:
+                cv2.namedWindow("RGB Tabletop", cv2.WINDOW_AUTOSIZE)
+
+            frame_period = 1.0 / self._preview_fps if self._preview_fps > 0 else 0.0
+            while True:
+                if self._preview_stop.is_set():
+                    break
+
+                with self._preview_lock:
+                    rgbd_wrist = self._rgbd_wrist
+                    rgbd_table = self._rgbd_table
+
+                try:
+                    if self._view_wrist and rgbd_wrist is not None and "rgb" in rgbd_wrist:
+                        wrist = _as_preview_image(rgbd_wrist["rgb"])
+                        cv2.imshow("RGB Wrist", cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
+                    if self._view_tabletop and rgbd_table is not None and "rgb" in rgbd_table:
+                        tabletop = _as_preview_image(rgbd_table["rgb"])
+                        cv2.imshow("RGB Tabletop", cv2.cvtColor(tabletop, cv2.COLOR_RGB2BGR))
+                    cv2.waitKey(1)
+                except cv2.error as exc:
+                    logger.warning("Camera preview stopped because OpenCV GUI failed: %s", exc)
+                    break
+
+                if frame_period > 0:
+                    self._preview_stop.wait(frame_period)
+        except Exception:
+            logger.exception("Camera preview thread failed")
+        finally:
+            if self._view_wrist or self._view_tabletop:
+                try:
+                    cv2.destroyAllWindows()
+                except cv2.error:
+                    pass
 
     @override
     def _execute_step(self) -> bool:
@@ -145,7 +243,7 @@ class MjViewer(NativeMujocoViewer):
         """
         with torch.no_grad():
             obs = self.env.get_observations()
-            # self._show_camera_previews()
+            self._update_camera_previews()
             if self.policy is not None:
                 if isinstance(self.policy, DeviceBase):
                     actions = self.policy(self.env._robot_tool_pose_b)

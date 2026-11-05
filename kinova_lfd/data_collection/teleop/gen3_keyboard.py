@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any
 
 import numpy as np
@@ -170,6 +170,18 @@ class Gen3KeyboardTeleop(Teleoperator):
                 elif not pressed and ch in self._pressed:
                     self._delta_rot -= self._rot_keys[ch]
                     self._pressed.discard(ch)
+
+    def reset(self) -> None:
+        """Clear accumulated keyboard commands after an environment reset."""
+        while True:
+            try:
+                self._event_queue.get_nowait()
+            except Empty:
+                break
+        self._pressed.clear()
+        self._delta_pos.fill(0.0)
+        self._delta_rot.fill(0.0)
+        self._gripper_closed = False
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
