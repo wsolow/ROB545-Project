@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-id", type=str, default=None)
     parser.add_argument("--task-description", type=str, default="Lift the cube to the goal")
     parser.add_argument("--fps", type=int, default=50)
-    parser.add_argument("--num-episodes", type=int, default=100, help="Number of successful episodes to save.")
+    parser.add_argument("--num-episodes", type=int, default=20, help="Number of successful episodes to save.")
     parser.add_argument("--episode-time", type=float, default=5.8)
     parser.add_argument("--reset-time", type=float, default=0.0)
     parser.add_argument("--success-delta", type=float, default=0.1, help="Maximum cube-goal distance in meters.")

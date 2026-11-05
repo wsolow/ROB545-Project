@@ -151,12 +151,12 @@ class MjGen3Env(MjDirectRlEnv):
         validate_scene_entities(self.cfg.scene, type(self).__name__)
 
         # Initialize scene and simulation.
-        self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device)
+        self.scene = Scene(self.cfg.scene, device=self.cfg.sim.device if hasattr(self.cfg.sim, "device") else "cuda")
         self.sim = Simulation(
             num_envs=self.scene.num_envs,
             cfg=self.cfg.sim,
             model=self.scene.compile(),
-            device=self.cfg.sim.device,
+            device=self.cfg.sim.device if hasattr(self.cfg.sim, "device") else "cuda",
         )
 
         self.scene.initialize(

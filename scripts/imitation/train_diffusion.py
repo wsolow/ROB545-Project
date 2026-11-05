@@ -45,9 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Load and validate the dataset, then exit without training.",
     )
     parser.add_argument("--device", type=str, default="cuda", help="Torch device for the policy.")
-    parser.add_argument("--steps", type=int, default=80_000, help="Training steps.")
+    parser.add_argument("--steps", type=int, default=80000, help="Training steps.")
     parser.add_argument("--batch-size", type=int, default=4, help="Batch size (default 4 for 12GB GPUs).")
-    parser.add_argument("--save-freq", type=int, default=20_000, help="Checkpoint every N steps.")
+    parser.add_argument("--save-freq", type=int, default=100, help="Checkpoint every N steps.")
     parser.add_argument("--seed", type=int, default=1000, help="Training seed.")
     parser.add_argument("--num-workers", type=int, default=2, help="DataLoader workers.")
     parser.add_argument("--log-freq", type=int, default=200, help="Log every N steps.")
@@ -143,7 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         f"  resize:   {resize_shape}\n"
         f"  output:   {cfg.output_dir}\n"
         f"  steps:    {cfg.steps}  batch: {cfg.batch_size}  device: {cfg.policy.device}\n"
-        f"  ema:      {cfg.ema.enable}  grad_ckpt: {cfg.policy.gradient_checkpointing}\n"
+        f"  ema:      {None if cfg.ema is None else cfg.ema.type}  "
+        f"grad_ckpt: {cfg.policy.gradient_checkpointing}\n"
     )
 
     from lerobot.scripts.lerobot_train import train

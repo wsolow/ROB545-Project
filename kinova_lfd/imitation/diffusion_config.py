@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 
 from lerobot.configs import FeatureType
-from lerobot.configs.default import DatasetConfig, EMAConfig, WandBConfig
+from lerobot.configs.default import DatasetConfig, TrackioConfig
 from lerobot.configs.train import TrainPipelineConfig
+from lerobot.optim.ema import WarmupEMAConfig
 from lerobot.policies.diffusion import DiffusionConfig
 from lerobot.utils.feature_utils import dataset_to_policy_features
 
@@ -40,6 +41,9 @@ def make_diffusion_train_config(
     ``image_keys`` defaults to ``["wrist"]``. Features are filtered so the policy
     only sees selected cameras; pair with :func:`filter_cameras_during_train` so
     unused videos are not decoded.
+
+    ``wandb_enable`` maps to LeRobot's ``TrackioConfig`` (WandB was replaced upstream).
+    ``ema_enable`` selects the default warmup EMA schedule when True, else disables EMA.
     """
     root = Path(root)
     name = root.name
@@ -88,8 +92,8 @@ def make_diffusion_train_config(
         env_eval_freq=0,
         log_freq=log_freq,
         save_freq=save_freq,
-        ema=EMAConfig(enable=ema_enable),
-        wandb=WandBConfig(enable=wandb_enable),
+        ema=WarmupEMAConfig() if ema_enable else None,
+        trackio=TrackioConfig(enable=wandb_enable),
     )
     # Stash selected cameras for the train script / patch (not a LeRobot field).
     cfg._kinova_image_keys = selected  # type: ignore[attr-defined]
