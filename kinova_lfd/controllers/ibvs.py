@@ -294,7 +294,7 @@ class IBVSController:
         max_ang_vel: float = 0.15,
         gripper_cmd: float = 0.0,
         grasp_z_abs: float = 0.03,
-        ibvs_error_threshold: float = 0.02,
+        ibvs_error_threshold: float = 0.025,
         ibvs_settle_steps: int = 30,
         use_angular: bool = False,
         pose_tol: float = 0.008,

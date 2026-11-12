@@ -3,10 +3,11 @@
 OpenCV viewer for Kortex (real-robot) environments. Mirrors the ``MjViewer`` API
 (``run`` / ``open_display`` / ``sync_display`` / ``close_display`` / ``viewer_closed``)
 but, instead of a MuJoCo window, shows the real wrist and tabletop cameras side by side
-in a single OpenCV window.
+in a single OpenCV window, both scaled to ``preview_height``.
 
-OpenCV HighGUI has no native split panes (one ``imshow`` image per window), so each
-camera gets its own size trackbar and the two scaled images are composed into one canvas.
+Pressing the record key (default V, read globally through pynput like the teleop
+keyboard) starts recording the displayed window, overlays included; pressing it again
+stops and saves an ``.mp4`` to ``video_dir``.
 
 Written by Will Solow, 2026.
 """
@@ -15,10 +16,13 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
+from pathlib import Path
 from typing import Any, Protocol
 
 import cv2
 import numpy as np
+from pynput import keyboard as pynput_keyboard
 
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
@@ -27,11 +31,8 @@ from kinova_lfd.teleop.devices.device_base import DeviceBase
 logger = logging.getLogger(__name__)
 
 WINDOW_NAME = "Kortex Cameras"
-WRIST_TRACKBAR = "Wrist size %"
-TABLETOP_TRACKBAR = "Tabletop size %"
-_MIN_SIZE_PCT = 20
-_MAX_SIZE_PCT = 300
 _PANE_GAP_PX = 4
+_VIDEO_FOURCC = "mp4v"
 
 
 class KortexPolicyProtocol(Protocol):
@@ -97,6 +98,17 @@ def _draw_status(image: np.ndarray, text: str) -> None:
     cv2.putText(image, text, (10, 10 + h), font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
 
+def _draw_rec_indicator(image: np.ndarray, elapsed_s: float) -> None:
+    """Draw a red ``REC mm:ss`` marker in the top-right corner."""
+    text = f"REC {int(elapsed_s) // 60:02d}:{int(elapsed_s) % 60:02d}"
+    font, scale, thickness = cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2
+    (w, h), baseline = cv2.getTextSize(text, font, scale, thickness)
+    x0 = image.shape[1] - w - 40
+    cv2.rectangle(image, (x0 - 10, 5), (image.shape[1] - 5, 15 + h + baseline), (0, 0, 0), -1)
+    cv2.circle(image, (x0 + 2, 10 + h // 2 + 2), 8, (0, 0, 255), -1)
+    cv2.putText(image, text, (x0 + 18, 10 + h), font, scale, (0, 0, 255), thickness, cv2.LINE_AA)
+
+
 class KortexViewer:
     """Run a policy on a Kortex env and preview the robot cameras in OpenCV windows.
 
@@ -114,6 +126,8 @@ class KortexViewer:
         view_tabletop: bool = True,
         preview_fps: float = 20.0,
         preview_height: int = 360,
+        record_key: str | None = "v",
+        video_dir: str | Path = "exp/ibvs_videos",
     ) -> None:
         """Initialize the viewer.
 
@@ -123,8 +137,10 @@ class KortexViewer:
             policy: Policy or teleop device. ``None`` holds the robot still.
             view_wrist: Show the wrist camera.
             view_tabletop: Show the tabletop RealSense camera.
-            preview_fps: Preview refresh rate.
-            preview_height: Pane height (px) at 100% on the size trackbars.
+            preview_fps: Preview refresh rate, also the frame rate of recorded videos.
+            preview_height: Height (px) of each camera pane.
+            record_key: Key that toggles video recording, or ``None`` to disable recording.
+            video_dir: Directory where recorded videos are saved.
 
         """
         self.env = env
@@ -138,6 +154,20 @@ class KortexViewer:
             logger.warning("Tabletop preview requested but env.cfg.use_tabletop_camera is False; disabling it.")
         self._preview_fps = preview_fps
         self._preview_height = preview_height
+
+        # Recording: the key listener only requests toggles; the preview thread owns the writer.
+        self._record_key = record_key.lower() if record_key else None
+        self._video_dir = Path(video_dir)
+        self._record_toggle = threading.Event()
+        self._record_key_down = False
+        self._key_listener: pynput_keyboard.Listener | None = None
+        self._recording = False
+        self._writer: cv2.VideoWriter | None = None
+        self._writer_size: tuple[int, int] | None = None
+        self._video_path: Path | None = None
+        self._rec_start = 0.0
+        self._rec_next_frame = 0.0
+        self._rec_frames = 0
 
         self._status_text = ""
         self._preview_stop = threading.Event()
@@ -171,6 +201,7 @@ class KortexViewer:
         start = getattr(self.policy, "start", None)
         if callable(start):
             start()
+        self._start_key_listener()
         if (self._view_wrist or self._view_tabletop) and self._preview_thread is None:
             self._preview_stop.clear()
             self._preview_thread = threading.Thread(
@@ -197,6 +228,7 @@ class KortexViewer:
     def close_display(self) -> None:
         """Stop the preview thread and the policy. Safe to call repeatedly."""
         try:
+            self._stop_key_listener()
             self._close_camera_preview()
         finally:
             stop = getattr(self.policy, "stop", None)
@@ -248,15 +280,6 @@ class KortexViewer:
                 logger.warning("Camera preview thread did not stop within the shutdown timeout")
         self._preview_thread = None
 
-    def _pane_height(self, trackbar: str) -> int:
-        """Pane height in pixels from its size trackbar (percent of ``preview_height``)."""
-        try:
-            pct = cv2.getTrackbarPos(trackbar, WINDOW_NAME)
-        except cv2.error:
-            pct = 100
-        pct = max(_MIN_SIZE_PCT, pct)
-        return max(1, round(self._preview_height * pct / 100.0))
-
     def _wrist_frame(self) -> np.ndarray | None:
         rgbd = self.env._get_latest_rgbd_wrist()
         if rgbd is None or rgbd.get("rgb") is None:
@@ -281,13 +304,104 @@ class KortexViewer:
         except cv2.error:
             return True
 
+    # ------------------------------------------------------------------ recording
+
+    def _start_key_listener(self) -> None:
+        """Listen (globally, like the teleop keyboard) for the record key."""
+        if self._record_key is None or self._key_listener is not None:
+            return
+        if not (self._view_wrist or self._view_tabletop):
+            logger.warning("Recording disabled: no camera preview is enabled.")
+            return
+        self._key_listener = pynput_keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
+        self._key_listener.start()
+        print(f"[INFO][KortexViewer] Press {self._record_key.upper()} to start/stop recording to {self._video_dir}/")
+
+    def _stop_key_listener(self) -> None:
+        if self._key_listener is not None:
+            self._key_listener.stop()
+            self._key_listener = None
+
+    def _key_char(self, key: Any) -> str | None:
+        try:
+            return key.char.lower()
+        except AttributeError:
+            return None
+
+    def _on_key_press(self, key: Any) -> None:
+        if self._key_char(key) != self._record_key or self._record_key_down:
+            return  # ignore other keys and auto-repeat while held
+        self._record_key_down = True
+        self._record_toggle.set()
+
+    def _on_key_release(self, key: Any) -> None:
+        if self._key_char(key) == self._record_key:
+            self._record_key_down = False
+
+    @property
+    def recording(self) -> bool:
+        """Whether a recording is in progress."""
+        return self._recording
+
+    def _video_fps(self) -> float:
+        return self._preview_fps if self._preview_fps > 0 else 20.0
+
+    def _handle_record_toggle(self) -> None:
+        """Apply a pending start/stop request (preview thread only)."""
+        if not self._record_toggle.is_set():
+            return
+        self._record_toggle.clear()
+        if self._recording:
+            self._stop_recording()
+        else:
+            self._recording = True
+            self._writer = None  # opened on the next displayed frame, which fixes its size
+            print("[INFO][KortexViewer] Recording started.")
+
+    def _record_frame(self, frame: np.ndarray) -> None:
+        """Write ``frame``, repeating it as needed so the video plays back in real time."""
+        now = time.perf_counter()
+        if self._writer is None:
+            self._video_dir.mkdir(parents=True, exist_ok=True)
+            self._video_path = self._video_dir / f"kortex_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
+            h, w = frame.shape[:2]
+            self._writer_size = (w, h)
+            self._writer = cv2.VideoWriter(
+                str(self._video_path), cv2.VideoWriter_fourcc(*_VIDEO_FOURCC), self._video_fps(), (w, h)
+            )
+            if not self._writer.isOpened():
+                logger.error("Could not open video writer for %s", self._video_path)
+                self._writer = None
+                self._recording = False
+                return
+            self._rec_start = now
+            self._rec_next_frame = now
+            self._rec_frames = 0
+
+        if (frame.shape[1], frame.shape[0]) != self._writer_size:
+            frame = cv2.resize(frame, self._writer_size, interpolation=cv2.INTER_AREA)
+        period = 1.0 / self._video_fps()
+        while self._rec_next_frame <= now:
+            self._writer.write(frame)
+            self._rec_frames += 1
+            self._rec_next_frame += period
+
+    def _stop_recording(self) -> None:
+        """Finish the current video, if any (preview thread only)."""
+        self._recording = False
+        writer, self._writer = self._writer, None
+        if writer is None:
+            print("[INFO][KortexViewer] Recording stopped before any frame was captured; nothing saved.")
+            return
+        writer.release()
+        duration = self._rec_frames / self._video_fps()
+        print(f"[INFO][KortexViewer] Saved video -> {self._video_path} ({duration:.1f}s, {self._rec_frames} frames)")
+
+    # ------------------------------------------------------------------ preview
+
     def _create_window(self) -> None:
-        """Create the shared window with one size trackbar per camera."""
+        """Create the shared camera window."""
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE | cv2.WINDOW_GUI_NORMAL)
-        if self._view_wrist:
-            cv2.createTrackbar(WRIST_TRACKBAR, WINDOW_NAME, 100, _MAX_SIZE_PCT, lambda _: None)
-        if self._view_tabletop:
-            cv2.createTrackbar(TABLETOP_TRACKBAR, WINDOW_NAME, 100, _MAX_SIZE_PCT, lambda _: None)
 
     def _preview_loop(self) -> None:
         """Pull the latest frames and show them side by side in one window on a dedicated thread."""
@@ -299,19 +413,26 @@ class KortexViewer:
                 with self._preview_lock:
                     status = self._status_text
                 try:
+                    self._handle_record_toggle()
                     panes = []
                     if self._view_wrist:
                         wrist = self._wrist_frame()
                         if wrist is not None:
-                            panes.append(_resize_to_height(wrist, self._pane_height(WRIST_TRACKBAR)))
+                            panes.append(_resize_to_height(wrist, self._preview_height))
                     if self._view_tabletop:
                         tabletop = self._tabletop_frame()
                         if tabletop is not None:
-                            panes.append(_resize_to_height(tabletop, self._pane_height(TABLETOP_TRACKBAR)))
+                            panes.append(_resize_to_height(tabletop, self._preview_height))
                     if panes:
                         for pane in panes:
                             _draw_status(pane, status)
-                        cv2.imshow(WINDOW_NAME, _compose_side_by_side(panes))
+                        canvas = _compose_side_by_side(panes)
+                        if self._recording:
+                            self._record_frame(canvas)
+                            if self._writer is not None:
+                                canvas = canvas.copy()
+                                _draw_rec_indicator(canvas, time.perf_counter() - self._rec_start)
+                        cv2.imshow(WINDOW_NAME, canvas)
                         shown = True
                     cv2.waitKey(1)
                     if self._window_closed(shown):
@@ -327,6 +448,8 @@ class KortexViewer:
         except Exception:
             logger.exception("Camera preview thread failed")
         finally:
+            if self._recording:
+                self._stop_recording()
             try:
                 cv2.destroyAllWindows()
             except cv2.error:

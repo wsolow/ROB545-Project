@@ -14,6 +14,7 @@ Key bindings (in addition to the Se3Keyboard motion keys, P = gripper, F = reset
     R  resume teleop after stop / home
     B  save the current wrist frame as a new setpoint (and use it)
     Z  quit
+    V  start/stop recording the camera window to exp/ibvs_videos (KortexViewer)
 
 With --dry-run the IBVS controller still runs every step while in IBVS mode, but a
 zero twist (gripper held) is sent instead. The commanded TCP-frame twist, the same
