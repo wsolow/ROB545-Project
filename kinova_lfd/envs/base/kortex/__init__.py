@@ -1,3 +1,6 @@
+import os
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
 from .kortex_tcp import KortexTcpEnv as KortexTcpEnv
 from .kortex_tcp import KortexTcpEnvCfg as KortexTcpEnvCfg
 from .kortex_udp import KortexUDPEnv as KortexUDPEnv

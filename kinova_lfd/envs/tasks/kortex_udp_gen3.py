@@ -81,7 +81,9 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
             from kinova_lfd.envs.base.kortex.realsense import WristCamera
 
             print("[INFO][Kortex] Instancing Wrist Camera...")
-            self._rs_wrist_camera = WristCamera(self.cfg.robot_ip)
+            self._rs_wrist_camera = WristCamera(
+                self.cfg.robot_ip, username=self.cfg.username, password=self.cfg.password
+            )
             self._rs_wrist_camera.start()
             print("[INFO][Kortex] Finished Instancing Wrist Camera")
 

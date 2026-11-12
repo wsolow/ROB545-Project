@@ -6,7 +6,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from kinova_lfd.core.np_math import np_quat_from_euler_xyz
+from kinova_lfd.core.np_math import np_convert_quat, np_quat_from_euler_xyz
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.seed import configure_seed
@@ -27,6 +27,9 @@ class KortexEnvCfg:
     use_tabletop_camera: bool = False
 
     use_wrist_camera: bool = False
+
+    display_wrist_camera: bool = False
+    """Show the raw wrist frame in an OpenCV window on every robot-info update."""
 
     dt: float = 1.0 / 30.0
     """Host step period. Setpoints are published at this rate."""
@@ -224,9 +227,15 @@ class KortexEnv(GymEnv):
     def _wrist_rgb(self) -> np.ndarray:
         return self._current_wrist_rgb
 
-    def _get_latest_rgbd_wrist(self) -> dict[str, Any]:
-        """Return the latest wrist RGB frame."""
-        return {"rgb": self._wrist_rgb}
+    def _get_latest_rgbd_wrist(self) -> dict[str, Any] | None:
+        """Return the latest wrist RGB frame in the MuJoCo RGB-D layout.
+
+        Returns:
+            ``None`` before the first frame, otherwise ``rgb`` (3, H, W) uint8 RGB,
+            ``depth`` (``None``), ``intrinsic_k`` (3, 3), ``camera_pose`` and ``timestamp``.
+
+        """
+        return self._rs_wrist_camera._get_latest_rgbd_raw()
 
     @property
     def _prev_actions(self) -> np.ndarray:
@@ -427,10 +436,14 @@ class KortexEnv(GymEnv):
         self._current_robot_tool_pose_b[0] = self._feedback.base.tool_pose_x
         self._current_robot_tool_pose_b[1] = self._feedback.base.tool_pose_y
         self._current_robot_tool_pose_b[2] = self._feedback.base.tool_pose_z
-        self._current_robot_tool_pose_b[3:7] = np_quat_from_euler_xyz(
-            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_x),
-            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_y),
-            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_z),
+        # np_quat_from_euler_xyz returns xyzw; the rest of the stack expects wxyz.
+        self._current_robot_tool_pose_b[3:7] = np_convert_quat(
+            np_quat_from_euler_xyz(
+                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_x),
+                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_y),
+                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_z),
+            ),
+            to="wxyz",
         )
 
         # Compute tool velocity
@@ -468,6 +481,6 @@ class KortexEnv(GymEnv):
 
         if self.cfg.use_wrist_camera:
             self._current_wrist_rgb = self._rs_wrist_camera._latest_rgb_frame
-            if self._current_wrist_rgb is not None:
+            if self.cfg.display_wrist_camera and self._current_wrist_rgb is not None:
                 cv2.imshow("rgb", self._current_wrist_rgb)
                 cv2.waitKey(1)

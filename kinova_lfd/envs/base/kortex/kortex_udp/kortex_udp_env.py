@@ -37,6 +37,8 @@ class KortexUDPEnvCfg(KortexEnvCfg):
 
     use_wrist_camera: bool = False
 
+    display_wrist_camera: bool = False
+
     dt: float = 1.0 / 30.0
     """Host step period. Setpoints are published at this rate."""
 

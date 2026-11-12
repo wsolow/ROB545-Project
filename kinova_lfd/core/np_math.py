@@ -194,7 +194,7 @@ def base_to_tcp_twist(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Transform a twist from base frame to TCP frame.
 
-    Quaternions are [w, x, y, z] following IsaacLab convention.
+    Quaternions are [x, y, z, w] following IsaacLab convention.
 
     Args:
         linear_vel: linear velocity in XYZ (m/s)

@@ -109,7 +109,7 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
             print("[INFO][RealSense] Finished Instancing TableTop Camera")
         if self.cfg.use_wrist_camera:
             print("[INFO][Kortex] Instancing Wrist Camera...")
-            self._rs_wrist_camera = WristCamera(self.cfg.robot_ip)
+            self._rs_wrist_camera = WristCamera(self.cfg.robot_ip, router=self.kortex_tcp_udp[0].router)
             self._rs_wrist_camera.start()
             print("[INFO][Kortex] Finished Instancing Wrist Camera")
 

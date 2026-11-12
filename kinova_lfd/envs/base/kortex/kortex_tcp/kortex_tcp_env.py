@@ -26,6 +26,8 @@ class KortexTcpEnvCfg(KortexEnvCfg):
 
     use_wrist_camera: bool = True
 
+    display_wrist_camera: bool = False
+
     dt: float = 1.0 / 30.0
 
     decimation: float = 1.0

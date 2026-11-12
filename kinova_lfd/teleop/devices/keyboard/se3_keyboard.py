@@ -66,6 +66,16 @@ class Se3Keyboard(DeviceBase):
         msg += "\tRotate arm along z-axis: U/O"
         return msg
 
+    def add_callback(self, key: str, func: Callable[[], None]) -> None:
+        """Register ``func`` to run (on the listener thread) when ``key`` is pressed.
+
+        Keys already bound to motion, the gripper (P) or reset (F) are rejected.
+        """
+        key = key.upper()
+        if key in self._POS_KEYS or key in self._ROT_KEYS or key in ("P", "F"):
+            raise ValueError(f"Key '{key}' is already bound by {self.__class__.__name__}.")
+        self._additional_callbacks[key] = func
+
     def reset(self):
         super().reset()
         self._close_gripper = False
