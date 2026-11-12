@@ -6,7 +6,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from kinova_lfd.core.np_math import np_convert_quat, np_quat_from_euler_xyz
+from kinova_lfd.core.np_math import np_quat_from_euler_xyz
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.seed import configure_seed
@@ -436,14 +436,10 @@ class KortexEnv(GymEnv):
         self._current_robot_tool_pose_b[0] = self._feedback.base.tool_pose_x
         self._current_robot_tool_pose_b[1] = self._feedback.base.tool_pose_y
         self._current_robot_tool_pose_b[2] = self._feedback.base.tool_pose_z
-        # np_quat_from_euler_xyz returns xyzw; the rest of the stack expects wxyz.
-        self._current_robot_tool_pose_b[3:7] = np_convert_quat(
-            np_quat_from_euler_xyz(
-                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_x),
-                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_y),
-                deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_z),
-            ),
-            to="wxyz",
+        self._current_robot_tool_pose_b[3:7] = np_quat_from_euler_xyz(
+            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_x),
+            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_y),
+            deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_z),
         )
 
         # Compute tool velocity

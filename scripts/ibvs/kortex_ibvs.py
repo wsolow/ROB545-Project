@@ -15,8 +15,17 @@ Key bindings (in addition to the Se3Keyboard motion keys, P = gripper, F = reset
     B  save the current wrist frame as a new setpoint (and use it)
     Z  quit
 
+With --dry-run the IBVS controller still runs every step while in IBVS mode, but a
+zero twist (gripper held) is sent instead. The commanded TCP-frame twist, the same
+velocity expressed in the robot base frame, and the grasp phase are logged and shown
+in the preview overlay. Teleop, stop and home are unaffected.
+
+Quaternion conventions: KortexEnv stores the tool quaternion as xyzw, which the numpy
+teleop stack (``kinova_lfd.core.np_math``) expects. IBVSController expects wxyz (like
+MuJoCo), so the pose is converted at the controller boundary in :func:`tcp_pose_wxyz`.
+
 Run from the repository root:
-    python -m scripts.ibvs.kortex_ibvs.kortex_ibvs --setpoint <wrist_png>
+    python -m scripts.ibvs.kortex_ibvs --setpoint <wrist_png> [--dry-run]
 
 Written by Will Solow, 2026.
 """
@@ -35,7 +44,8 @@ import numpy as np
 
 from kinova_lfd.agents.moderator import HOME_TCP_CART
 from kinova_lfd.controllers import IBVSController
-from kinova_lfd.controllers.ibvs import GraspPhase, extract_block_corners_px
+from kinova_lfd.controllers.ibvs import GraspPhase, extract_block_corners_px, quat_wxyz_to_rotmat
+from kinova_lfd.core.np_math import np_convert_quat
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.kortex.viewer import KortexViewer
 from kinova_lfd.envs.factory import create_env
@@ -146,8 +156,31 @@ parser.add_argument(
     default=10.0,
     help="Seconds to wait for the first wrist frame at startup.",
 )
+parser.add_argument(
+    "--dry-run",
+    action="store_true",
+    help="Run IBVS but send zero twists; log the commanded twist (TCP and base frame) instead.",
+)
+parser.add_argument(
+    "--dry-run-log-every",
+    type=int,
+    default=10,
+    help="In --dry-run, print the commanded twist every N IBVS steps (and on every phase change).",
+)
 
 args_cli = parser.parse_args()
+
+
+def tcp_pose_wxyz(env) -> np.ndarray:
+    """Return the Kortex TCP pose as xyz + quat **wxyz** for IBVSController.
+
+    ``KortexEnv`` stores the tool quaternion as xyzw (``np_quat_from_euler_xyz`` output),
+    while the IBVS controller's pose math (``quat_wxyz_to_rotmat`` / ``quat_error_rotvec``)
+    expects wxyz.
+    """
+    pose = tcp_pose_numpy(env).copy()
+    pose[3:7] = np_convert_quat(pose[3:7], to="wxyz")
+    return pose
 
 
 class Mode(Enum):
@@ -191,6 +224,8 @@ class KortexIbvsTeleopAdapter:
         controller: IBVSController | None = None,
         setpoint_dir: str | Path = "exp/ibvs_setpoints",
         home_tcp: np.ndarray = HOME_TCP_CART,
+        dry_run: bool = False,
+        dry_run_log_every: int = 10,
     ) -> None:
         """Initialize the adapter.
 
@@ -203,6 +238,8 @@ class KortexIbvsTeleopAdapter:
             setpoint_dir: Where captured setpoints are written.
             home_tcp: Home pose ``[x, y, z, rx, ry, rz, gripper]`` (the gripper entry is
                 replaced with the current gripper command).
+            dry_run: Compute IBVS twists but send zero twists (gripper held) instead.
+            dry_run_log_every: Print the dry-run twist every N IBVS steps.
 
         """
         self.env = env
@@ -216,10 +253,14 @@ class KortexIbvsTeleopAdapter:
         self._pending: set[str] = set()
         self._pending_lock = threading.Lock()
 
+        self.dry_run = dry_run
+        self._dry_run_log_every = max(1, int(dry_run_log_every))
+        self._dry_step = 0
+        self._dry_last_phase: GraspPhase | None = None
+        self._dry_v_base: np.ndarray | None = None
+
         for key in _KEY_PRIORITY:
             self.teleop.add_callback(key, self._make_latch(key))
-
-
 
     def start(self) -> None:
         """Start the keyboard listener."""
@@ -242,10 +283,15 @@ class KortexIbvsTeleopAdapter:
         if self.mode is Mode.IBVS and self.controller is not None:
             err = self.controller._last_error_norm
             err_txt = f" err={err:.3f}" if err is not None else " (no block)"
-            return f"IBVS:{self.controller.phase.name}{err_txt}"
+            text = f"IBVS:{self.controller.phase.name}{err_txt}"
+            if self.dry_run and self._dry_v_base is not None:
+                vx, vy, vz = self._dry_v_base * 100.0
+                text += f" | v_base cm/s=({vx:+.1f},{vy:+.1f},{vz:+.1f})"
+            return ("DRY " if self.dry_run else "") + text
+        prefix = "DRY " if self.dry_run else ""
         if self.mode is Mode.TELEOP and self.controller is None:
-            return "TELEOP (no setpoint: press B)"
-        return self.mode.name
+            return prefix + "TELEOP (no setpoint: press B)"
+        return prefix + self.mode.name
 
     def annotate_wrist(self, bgr: np.ndarray) -> np.ndarray:
         """Draw the setpoint corners (green) and the live detection (red) on the wrist preview."""
@@ -258,7 +304,6 @@ class KortexIbvsTeleopAdapter:
             cv2.polylines(bgr, [live.reshape(-1, 1, 2).astype(np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
         return bgr
 
-
     def __call__(self, observation) -> tuple[np.ndarray, ActionSpec]:
         """Resolve pending keys, then return the action for the current mode."""
         del observation  # Teleop and IBVS both use the TCP pose / wrist camera directly.
@@ -270,8 +315,7 @@ class KortexIbvsTeleopAdapter:
             return self._teleop_action()
         if self.mode is Mode.HOME:
             return self._home_action()
-        return self._hold_action()  
-
+        return self._hold_action()
 
     @property
     def _gripper(self) -> float:
@@ -297,12 +341,44 @@ class KortexIbvsTeleopAdapter:
             return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.controller.gripper_cmd]), ActionSpec.TWIST_TCP
 
         rgb, depth, _ = rgbd_to_numpy(rgbd)
-        twist = self.controller(rgb, depth, tcp_pose=tcp_pose_numpy(self.env), dt=self.env.step_dt)
+        tcp_pose = tcp_pose_wxyz(self.env)
+        twist = np.asarray(self.controller(rgb, depth, tcp_pose=tcp_pose, dt=self.env.step_dt), dtype=np.float64)
+
+        if self.dry_run:
+            self._log_dry_run(twist, tcp_pose)
 
         if self.controller.phase is GraspPhase.DONE:
             self._return_to_teleop("Grasp complete")
-        return np.asarray(twist, dtype=np.float64), ActionSpec.TWIST_TCP
 
+        if self.dry_run:
+            # Robot holds still; the gripper stays where the operator left it.
+            return self._hold_action()
+        return twist, ActionSpec.TWIST_TCP
+
+    def _log_dry_run(self, twist: np.ndarray, tcp_pose_wxyz_: np.ndarray) -> None:
+        """Record and periodically print the twist IBVS would have sent."""
+        assert self.controller is not None
+        R_base_tcp = quat_wxyz_to_rotmat(tcp_pose_wxyz_[3:7])
+        v_base = R_base_tcp @ twist[:3]
+        w_base = R_base_tcp @ twist[3:6]
+        self._dry_v_base = v_base
+
+        phase = self.controller.phase
+        phase_changed = phase is not self._dry_last_phase
+        if phase_changed or self._dry_step % self._dry_run_log_every == 0:
+            err = self.controller._last_error_norm
+            err_txt = f"{err:.4f}" if err is not None else "none (no block)"
+            print(
+                f"[DRY-RUN][IBVS] step={self._dry_step:4d} phase={phase.name:8s} err={err_txt}\n"
+                f"    v_tcp ={np.array2string(twist[:3], precision=4, suppress_small=True)} m/s  "
+                f"w_tcp ={np.array2string(twist[3:6], precision=4, suppress_small=True)} rad/s  "
+                f"gripper={twist[6]:.1f}\n"
+                f"    v_base={np.array2string(v_base, precision=4, suppress_small=True)} m/s  "
+                f"w_base={np.array2string(w_base, precision=4, suppress_small=True)} rad/s  "
+                f"tcp_xyz={np.array2string(tcp_pose_wxyz_[:3], precision=3)}"
+            )
+        self._dry_last_phase = phase
+        self._dry_step += 1
 
     def _make_latch(self, key: str) -> Callable[[], None]:
         def _latch() -> None:
@@ -371,7 +447,9 @@ class KortexIbvsTeleopAdapter:
             return
         rgb, _, K = rgbd_to_numpy(rgbd)
         z = float(tcp_pose_numpy(self.env)[2])
-        out = save_setpoint_rgb(self._setpoint_dir / f"wrist_setpoint_z{z:.3f}_{time.strftime('%Y%m%d_%H%M%S')}.png", rgb)
+        out = save_setpoint_rgb(
+            self._setpoint_dir / f"wrist_setpoint_z{z:.3f}_{time.strftime('%Y%m%d_%H%M%S')}.png", rgb
+        )
         print(f"[INFO][IBVS-TELEOP] Saved wrist setpoint -> {out} (tcp_z={z:.3f})")
         try:
             self.controller = self._controller_factory(rgb, K)
@@ -379,13 +457,15 @@ class KortexIbvsTeleopAdapter:
         except ValueError as exc:
             print(f"[WARN][IBVS-TELEOP] Saved, but not using it as the setpoint: {exc}")
 
-
     def _start_grasp(self) -> None:
         if self.controller is None:
             print(f"[WARN][IBVS-TELEOP] No setpoint loaded; press {KEY_SAVE} to capture one first.")
             return
         self.controller.reset_phase()
-        self._set_mode(Mode.IBVS, "Starting IBVS grasp")
+        self._dry_step = 0
+        self._dry_last_phase = None
+        self._dry_v_base = None
+        self._set_mode(Mode.IBVS, "Starting IBVS grasp" + (" (DRY RUN: no motion sent)" if self.dry_run else ""))
 
     def _return_to_teleop(self, reason: str) -> None:
         self._sync_gripper_from_controller()
@@ -393,7 +473,8 @@ class KortexIbvsTeleopAdapter:
 
     def _sync_gripper_from_controller(self) -> None:
         """Make the keyboard's gripper state match what IBVS last commanded."""
-        if self.controller is None:
+        if self.controller is None or self.dry_run:
+            # In dry run the IBVS gripper command was never sent, so keep the operator's.
             return
         closed = float(self.controller.gripper_cmd) >= 0.5
         self.teleop._close_gripper = closed
@@ -457,7 +538,11 @@ def main() -> None:
         controller_factory=make_controller,
         controller=controller,
         setpoint_dir=args_cli.setpoint_dir,
+        dry_run=args_cli.dry_run,
+        dry_run_log_every=args_cli.dry_run_log_every,
     )
+    if args_cli.dry_run:
+        print("[INFO][IBVS-TELEOP] DRY RUN: IBVS twists are logged, not sent. Teleop/stop/home still move the robot.")
 
     KortexViewer(
         env,

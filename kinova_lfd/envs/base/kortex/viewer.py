@@ -147,7 +147,6 @@ class KortexViewer:
         self._opened = False
         self._step_count = 0
 
-
     def run(self) -> None:
         """Run the control loop until the policy quits, a window closes, or Ctrl-C."""
         self.open_display()
@@ -210,7 +209,6 @@ class KortexViewer:
         """Whether a preview window was closed by the user."""
         return self._viewer_closed
 
-
     def _compute_action(self) -> tuple[np.ndarray, ActionSpec]:
         """Query the policy for the next action and its specification."""
         if self.policy is None:
@@ -239,7 +237,6 @@ class KortexViewer:
             self.env.step(np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gripper]), action_spec=ActionSpec.TWIST_TCP)
         except Exception:
             logger.exception("Failed to send the stop command on exit")
-
 
     def _close_camera_preview(self) -> None:
         """Stop the camera preview thread; safe to call repeatedly."""

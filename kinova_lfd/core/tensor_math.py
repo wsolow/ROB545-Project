@@ -2133,8 +2133,3 @@ def base_to_tcp_twist(
     angular_vel_tcp = quat_apply(tcp_quat_inv, angular_vel)
 
     return linear_vel_tcp, angular_vel_tcp
-
-
-
-
-
