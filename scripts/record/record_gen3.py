@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--teleop",
         type=str,
-        default="keyboard",
+        default="xbox",
         choices=TELEOP_DEVICES,
         help="Teleop device (keyboard = Se3Keyboard, xbox = XboxController); both 6-DoF + gripper.",
     )
@@ -74,26 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-video", action="store_true", help="Store images instead of video.")
     parser.add_argument("--resume", action="store_true", help="Resume an existing dataset.")
-    parser.add_argument("--display-data", action="store_true", help="Log to Rerun.")
-    parser.add_argument("--play-sounds", action="store_true", help="Speak episode prompts.")
-    parser.add_argument(
-        "--view",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Open the live viewer (MuJoCo window for mj_gen3, camera window for kortex_tcp_gen3).",
-    )
-    parser.add_argument(
-        "--view-wrist",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Show the wrist RGB preview window.",
-    )
-    parser.add_argument(
-        "--view-tabletop",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Show the tabletop RGB preview window.",
-    )
+
     return parser
 
 
@@ -131,16 +112,13 @@ def main(argv: list[str] | None = None) -> int:
             single_task=args.task,
             fps=args.fps,
             episode_time_s=args.episode_time,
-            reset_time_s=args.reset_time,
             num_episodes=args.num_episodes,
             video=not args.no_video,
             resume=args.resume,
         ),
-        display_data=args.display_data,
-        play_sounds=args.play_sounds,
-        view=args.view,
-        view_wrist=args.view_wrist,
-        view_tabletop=args.view_tabletop,
+        view=True,
+        view_wrist=True,
+        view_tabletop=True,
     )
 
     dataset = record(cfg)

@@ -76,8 +76,6 @@ class Gen3RecordConfig:
     teleop: TeleoperatorConfig | None = field(default_factory=lambda: make_teleop_config("keyboard"))
     policy: "RslRlPolicyConfig | None" = None
     dataset: Gen3DatasetConfig = field(default_factory=Gen3DatasetConfig)
-    display_data: bool = False
-    play_sounds: bool = False
     # Live viewer: MjViewer for mj_gen3, KortexViewer camera window for kortex_tcp_gen3.
     # Camera previews reuse the frames the robot captured for the dataset.
     view: bool = True

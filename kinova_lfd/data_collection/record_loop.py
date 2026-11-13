@@ -12,7 +12,6 @@ from lerobot.teleoperators.utils import TeleopEvents
 from lerobot.utils.constants import ACTION, OBS_STR
 from lerobot.utils.cycle_timer import CycleTimer
 from lerobot.utils.feature_utils import build_dataset_frame
-from lerobot.utils.visualization_utils import log_visualization_data
 
 from .controls import apply_recording_control
 
@@ -128,15 +127,6 @@ def record_loop(
                 action_frame = build_dataset_frame(dataset.features, act_processed, prefix=ACTION)
                 frame = {**observation_frame, **action_frame, "task": single_task}
                 dataset.add_frame(frame)
-
-        if display_data:
-            with timer.section("telemetry"):
-                log_visualization_data(
-                    display_mode,
-                    observation=obs_processed,
-                    action=act_processed,
-                    compress_images=display_compressed_images,
-                )
 
         timer.wait()
         timestamp = time.perf_counter() - start_episode_t

@@ -17,8 +17,7 @@ from lerobot.robots import Robot
 from lerobot.utils.constants import ACTION, OBS_STR
 from lerobot.utils.cycle_timer import CycleTimer
 from lerobot.utils.feature_utils import build_dataset_frame, combine_feature_dicts
-from lerobot.utils.utils import init_logging, log_say
-from lerobot.utils.visualization_utils import init_visualization, log_visualization_data, shutdown_visualization
+from lerobot.utils.utils import init_logging
 
 from .configs import Gen3RecordConfig
 from .controls import init_recording_listener, poll_source_controls
@@ -33,9 +32,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
         raise ValueError("Configure exactly one action source: teleop or policy.")
     if cfg.teleop is None and cfg.policy is None:
         raise ValueError("Configure an action source: teleop or policy.")
-
-    if cfg.display_data:
-        init_visualization("rerun", session_name="gen3_recording")
 
     robot = make_robot(cfg.robot)
     # Teleops and policies share connect / disconnect / reset / get_action.
@@ -129,7 +125,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             robot_observation_processor=robot_observation_processor,
             source=source,
             single_task=dataset_cfg.single_task,
-            display_data=cfg.display_data,
             viewer=viewer,
         )
 
@@ -140,7 +135,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 # Every episode starts from fresh source state: zero teleop motion, open
                 # gripper, no stale button presses / cleared recurrent policy state.
                 source.reset()
-                log_say(f"Recording episode {episode_index}", cfg.play_sounds)
                 run_loop(dataset=dataset, control_time_s=dataset_cfg.episode_time_s, timer=timer)
 
                 if events["reset_environment"]:
@@ -162,11 +156,9 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     if not policy_episode_succeeded(robot, cfg.policy.success_delta):
                         events["rerecord_episode"] = True
                 elif recorded_episodes < dataset_cfg.num_episodes - 1 or events["rerecord_episode"]:
-                    log_say("Reset the environment", cfg.play_sounds)
                     run_loop(control_time_s=dataset_cfg.reset_time_s)
 
                 if events["rerecord_episode"]:
-                    log_say("Re-record episode", cfg.play_sounds)
                     events["rerecord_episode"] = False
                     events["exit_early"] = False
                     dataset.clear_episode_buffer()
@@ -203,16 +195,11 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
         if listener is not None:
             listener.stop()
 
-        if cfg.display_data:
-            shutdown_visualization("rerun")
-
         if dataset_cfg.push_to_hub and dataset is not None and dataset.num_episodes > 0:
             dataset.push_to_hub()
 
         # Perform all resource cleanup before optional speech. Blocking audio
         # must not delay shutdown after Ctrl+C or a closed MuJoCo window.
-        log_say("Stop recording", cfg.play_sounds, blocking=False)
-        log_say("Exiting", cfg.play_sounds, blocking=False)
 
     assert dataset is not None
     return dataset
@@ -230,7 +217,6 @@ def record_loop(
     dataset: LeRobotDataset | None = None,
     control_time_s: float | None = None,
     single_task: str | None = None,
-    display_data: bool = False,
     display_mode: str = "rerun",
     display_compressed_images: bool = False,
     timer: CycleTimer | None = None,
@@ -305,15 +291,6 @@ def record_loop(
                 action_frame = build_dataset_frame(dataset.features, act_processed, prefix=ACTION)
                 frame = {**observation_frame, **action_frame, "task": single_task}
                 dataset.add_frame(frame)
-
-        if display_data:
-            with timer.section("telemetry"):
-                log_visualization_data(
-                    display_mode,
-                    observation=obs_processed,
-                    action=act_processed,
-                    compress_images=display_compressed_images,
-                )
 
         timer.wait()
         timestamp = time.perf_counter() - start_episode_t

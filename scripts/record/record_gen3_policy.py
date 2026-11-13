@@ -28,13 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=50)
     parser.add_argument("--num-episodes", type=int, default=20, help="Number of successful episodes to save.")
     parser.add_argument("--episode-time", type=float, default=5.8)
-    parser.add_argument("--reset-time", type=float, default=0.0)
     parser.add_argument("--success-delta", type=float, default=0.1, help="Maximum cube-goal distance in meters.")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--no-video", action="store_true")
-    parser.add_argument("--view", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--view-wrist", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--view-tabletop", action=argparse.BooleanOptionalAction, default=False)
     return parser
 
 
@@ -68,13 +64,12 @@ def main() -> int:
             single_task=args.task_description,
             fps=args.fps,
             episode_time_s=args.episode_time,
-            reset_time_s=args.reset_time,
             num_episodes=args.num_episodes,
             video=not args.no_video,
         ),
-        view=args.view,
-        view_wrist=args.view_wrist,
-        view_tabletop=args.view_tabletop,
+        view=True,
+        view_wrist=True,
+        view_tabletop=True,
     )
     dataset = record(cfg)
     print(f"Saved {dataset.num_episodes} successful episodes to {cfg.dataset.resolved_root().resolve()}")
