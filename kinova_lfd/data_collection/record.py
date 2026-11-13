@@ -217,8 +217,6 @@ def record_loop(
     dataset: LeRobotDataset | None = None,
     control_time_s: float | None = None,
     single_task: str | None = None,
-    display_mode: str = "rerun",
-    display_compressed_images: bool = False,
     timer: CycleTimer | None = None,
     viewer: Any | None = None,
 ) -> None:
