@@ -105,8 +105,6 @@ class Gen3LfDRobot(Robot):
         self.env: GymEnv | None = None
         self._is_connected = False
         self._action_spec = parse_action_spec(getattr(config, "action_spec", ActionSpec.TWIST_TCP))
-        # env.step calls per send_action; subclasses may raise this on connect.
-        self._steps_per_action = 1
 
     @property
     def _joint_names(self) -> tuple[str, ...]:
@@ -209,9 +207,7 @@ class Gen3LfDRobot(Robot):
             if getattr(self.env, "num_envs", 1) > 0:
                 step_action = step_action.unsqueeze(0)
 
-        # mj_gen3 may substep so sim time matches the wall-clock control period.
-        for _ in range(self._steps_per_action):
-            self.env.step(step_action, action_spec=self._action_spec)
+        self.env.step(step_action, action_spec=self._action_spec)
         return {key: float(action[key]) for key in self._action_keys}
 
     @check_if_not_connected

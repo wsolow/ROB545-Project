@@ -56,7 +56,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=20, help="Recording / control rate.")
     parser.add_argument("--num-episodes", type=int, default=10, help="Number of episodes to record.")
     parser.add_argument("--episode-time", type=float, default=60.0, help="Seconds per episode.")
-    parser.add_argument("--reset-time", type=float, default=10.0, help="Unrecorded reset seconds.")
     parser.add_argument(
         "--pos-sensitivity", type=float, default=0.15, help="Linear speed (m/s) at full key press / stick."
     )
@@ -65,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--device", type=str, default="cuda", help="MuJoCo sim device (mj_gen3 only).")
     parser.add_argument("--robot-ip", type=str, default="192.168.1.10", help="Kortex robot IP (kortex only).")
+
     parser.add_argument(
         "--cameras",
         type=str,
@@ -89,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     }
     if args.robot == "mj_gen3":
         robot_overrides["device"] = args.device
+        robot_overrides["interpolate_joint_targets"] = False
+        # Episodes are delimited by the recorder (which resets the env at each episode start),
+        # so disable the task's time-limit auto-reset.
+        robot_overrides["episode_length_s"] = 1e9
     else:
         robot_overrides["robot_ip"] = args.robot_ip
 

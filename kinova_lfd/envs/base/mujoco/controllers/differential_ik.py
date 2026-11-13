@@ -34,6 +34,7 @@ class MjDifferentialIk:
         self._goal_pos = None
         self._goal_quat = None
         self._twist_f = None
+        # False until the first compute_joint_pos, then an (N, 1) bool tensor (device-side).
         self.active = False
         # Twist low-pass time constant (s) and accel limits (m/s^2, rad/s^2).
         self.tau = float(tau)
@@ -70,31 +71,43 @@ class MjDifferentialIk:
         return self._velocity_smoothing(dq) if smoothing else dq
 
     def compute_joint_pos(self, twist, smoothing=False):
+        """Integrate the filtered TCP twist into a tool goal and solve for a joint step.
+
+        Runs entirely on device (no GPU->CPU sync): ``self.active`` is an ``(N, 1)`` bool
+        tensor marking envs with a non-zero filtered twist. Idle envs get ``dq = 0``, have
+        their filter state cleared, and re-seed their goal from the measured tool pose on
+        their next active step.
+        """
         twist_f = self._filter_twist(twist[:, :6])
-        self.active = bool((twist_f.abs() > 1e-4).any())
-        if not self.active:
-            self._twist_f.zero_()
-            self._goal_pos = self._goal_quat = None
-            return torch.zeros((twist.shape[0], self._ik_action._num_joints), device=twist.device, dtype=twist.dtype)
+        active = (twist_f.abs() > 1e-4).any(dim=1, keepdim=True)
 
         frame_pos, frame_quat = self._ik_action._get_frame_pose()
         if self._goal_pos is None:
             self._goal_pos, self._goal_quat = frame_pos.clone(), frame_quat.clone()
+        # Envs idle on the previous step start integrating from the measured pose.
+        was_active = self.active if isinstance(self.active, torch.Tensor) else torch.zeros_like(active)
+        goal_pos = torch.where(was_active, self._goal_pos, frame_pos)
+        goal_quat = torch.where(was_active, self._goal_quat, frame_quat)
 
         dt = self._env.dt
         # rotate by the GOAL orientation so the path is open-loop
-        lin_w = quat_apply(self._goal_quat, twist_f[:, 0:3])
-        ang_w = quat_apply(self._goal_quat, twist_f[:, 3:6])
+        lin_w = quat_apply(goal_quat, twist_f[:, 0:3])
+        ang_w = quat_apply(goal_quat, twist_f[:, 3:6])
         delta = torch.cat((lin_w, ang_w), dim=1) * dt
-        self._goal_pos, self._goal_quat = apply_delta_pose(self._goal_pos, self._goal_quat, delta)
+        goal_pos, goal_quat = apply_delta_pose(goal_pos, goal_quat, delta)
 
         # anti-windup: limit how far the goal can lead the measured pose
-        err = self._goal_pos - frame_pos
+        err = goal_pos - frame_pos
         scale = (self.max_lead_pos / (err.norm(dim=1, keepdim=True) + 1e-9)).clamp(max=1.0)
-        self._goal_pos = frame_pos + err * scale
+        goal_pos = frame_pos + err * scale
 
-        self._ik_action.process_actions(torch.cat((self._goal_pos, self._goal_quat), dim=1))
-        return self._solve_dq()
+        self._ik_action.process_actions(torch.cat((goal_pos, goal_quat), dim=1))
+        dq = torch.where(active, self._solve_dq(), 0.0)
+
+        self._goal_pos, self._goal_quat = goal_pos, goal_quat
+        self._twist_f = torch.where(active, twist_f, 0.0)
+        self.active = active
+        return dq
 
     def _solve_dq(self) -> torch.Tensor:
         """Solve for a joint step, then scale the whole vector to ``max_dq``.

@@ -45,6 +45,9 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
     joint_ids = [0, 1, 2, 3, 4, 5, 6, 0]
     tcp_offset = [0.0, 0.0, 0.120, 0.0, 0.0, 0.0, 1.0]
     """TCP offset from ``ee_link_name``: ``[x, y, z, qx, qy, qz, qw]`` (xyzw, like ``KortexEnv``)."""
+    interpolate_joint_targets = False
+    """Linearly interpolate arm joint targets from the previous env.step's targets to the new ones
+    across the ``decimation`` physics substeps, instead of holding the new targets constant."""
 
     sim = SimulationCfg(njmax=300, nconmax=50, mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
 
@@ -114,7 +117,14 @@ class MjGen3Env(MjDirectRlEnv):
         self.robot_dof_upper_limits[self.robot_dof_upper_limits == float("inf")] = torch.pi
 
         self.robot_dof_targets = self.robot.data.default_joint_pos[:, self.cfg.joint_ids].clone()
+        self._prev_dof_targets = self.robot_dof_targets
+        self._substep = 0
         self._curr_gripper_goal = None
+
+        # Index tensors for the per-substep target writes. Indexing a CUDA tensor with a Python
+        # list copies a fresh index tensor host->device on every call, which blocks the CPU.
+        self._arm_joint_ids = torch.as_tensor(self.cfg.joint_ids[:-1], device=self.device, dtype=torch.long)
+        self._gripper_tendon_ids = torch.as_tensor(self.cfg.joint_ids[-1:], device=self.device, dtype=torch.long)
 
         self.ee_link_idx = self.robot.find_bodies(self.cfg.ee_link_name)[0][0]
         self.tool_site_idx = self.robot.find_sites(self.cfg.tool_site_name)[0][0]
@@ -177,12 +187,15 @@ class MjGen3Env(MjDirectRlEnv):
             self._wrist_camera = self.scene.sensors["wrist_camera"]
 
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
+        # Targets held at the end of the previous env.step (start point for interpolation).
+        self._prev_dof_targets = self.robot_dof_targets
+        self._substep = 0
         if action_spec == ActionSpec.MOVE_TCP:
             # Obtain waypoints that should be followed by the arm
             # Waypoints run on mjlab's wxyz pose, not the xyzw public property.
             tool_pose_wxyz = self.robot.data.site_pose_w[:, self.tool_site_idx]
             next_action = self._waypoints.get_next_point(tool_pose_wxyz, actions[:, :6])
-            arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_vel(
+            arm_targets = self._joint_positions[:, self._arm_joint_ids] + self._diff_ik.compute_joint_vel(
                 next_action, smoothing=False
             )
             targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
@@ -190,10 +203,12 @@ class MjGen3Env(MjDirectRlEnv):
         elif action_spec == ActionSpec.TWIST_TCP:
             twist = actions[:, :6]
             dq = self._diff_ik.compute_joint_pos(twist, smoothing=False)
-            if self._diff_ik.active:
-                arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + dq
-            else:
-                arm_targets = self.robot_dof_targets[:, :-1]
+            # Idle envs (zero twist) hold their previous targets; selected on device, no host sync.
+            arm_targets = torch.where(
+                self._diff_ik.active,
+                self._joint_positions[:, self._arm_joint_ids] + dq,
+                self.robot_dof_targets[:, :-1],
+            )
             targets = torch.cat((arm_targets, actions[:, -1:]), dim=1)
             self.actions = targets.clone()
 
@@ -204,12 +219,18 @@ class MjGen3Env(MjDirectRlEnv):
         self.robot_dof_targets = self.actions.clone()
 
     def _apply_action(self) -> None:
-        """Send the action to the robot."""
+        """Send the action to the robot (called once per physics substep)."""
+        targets = self.robot_dof_targets
+        arm_targets = targets[:, :-1]
+        if self.cfg.interpolate_joint_targets:
+            self._substep += 1
+            alpha = min(self._substep / self.cfg.decimation, 1.0)
+            arm_targets = torch.lerp(self._prev_dof_targets[:, :-1], arm_targets, alpha)
         self.robot.set_tendon_len_target(
-            torch.where(self.robot_dof_targets[:, -1:] > 0, 255, self.robot_dof_targets[:, -1:]),
-            tendon_ids=self.cfg.joint_ids[-1:],
+            torch.where(targets[:, -1:] > 0, 255, targets[:, -1:]),
+            tendon_ids=self._gripper_tendon_ids,
         )
-        self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self.cfg.joint_ids[:-1])
+        self.robot.set_joint_position_target(arm_targets, joint_ids=self._arm_joint_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Terminate if max length is reached."""

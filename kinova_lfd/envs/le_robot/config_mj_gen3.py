@@ -25,7 +25,15 @@ class MjGen3RobotConfig(RobotConfig):
     # Action mode forwarded to Kinova ``ActionSpec``
     action_spec: str = "TWIST_TCP"
 
-    # Wall-clock control period (s), matching ``KortexTcpGen3RobotConfig.dt``. On connect,
-    # send_action repeats env.step round(dt / env.step_dt) times so sim time tracks wall
-    # time. None -> one env.step per action (e.g. policies trained at env.step_dt).
+    # Control period (s), matching ``KortexTcpGen3RobotConfig.dt``. Sets the env decimation to
+    # round(dt / physics_dt) so one env.step (one IK solve, forward, and render) spans one control
+    # tick. None -> the task's own decimation (e.g. policies trained at its env.step_dt).
     dt: float | None = None
+
+    # Override the task's episode_length_s (env auto-resets once this much sim time passes
+    # since the last reset). None -> the task default.
+    episode_length_s: float | None = None
+
+    # Linearly interpolate arm joint targets across the physics substeps of each env.step
+    # instead of holding them constant (Mj-Gen3-v0 only).
+    interpolate_joint_targets: bool = False

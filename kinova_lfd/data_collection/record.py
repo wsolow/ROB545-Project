@@ -132,14 +132,15 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             recorded_episodes = 0
             while recorded_episodes < dataset_cfg.num_episodes and not events["stop_recording"]:
                 episode_index = dataset.num_episodes
-                # Every episode starts from fresh source state: zero teleop motion, open
-                # gripper, no stale button presses / cleared recurrent policy state.
+                # Every episode starts from a freshly reset env and fresh source state: zero
+                # teleop motion, open gripper, no stale button presses / cleared policy state.
+                _reset_env(robot)
                 source.reset()
                 run_loop(dataset=dataset, control_time_s=dataset_cfg.episode_time_s, timer=timer)
 
                 if events["reset_environment"]:
+                    # The env reset happens at the top of the next episode.
                     dataset.clear_episode_buffer()
-                    _reset_env(robot)
                     events["reset_environment"] = False
                     events["exit_early"] = False
                     timer.log_episode_summary("reset episode")
@@ -162,8 +163,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                     events["rerecord_episode"] = False
                     events["exit_early"] = False
                     dataset.clear_episode_buffer()
-                    if is_policy:
-                        _reset_env(robot)
                     timer.log_episode_summary("discarded episode")
                     timer.restart()
                     continue
@@ -295,7 +294,7 @@ def record_loop(
 
 
 def _reset_env(robot: Robot) -> None:
-    """Reset the robot's environment (warns for backends without one)."""
+    """Reset the robot's environment (no-op for backends without one)."""
     reset = getattr(getattr(robot, "env", None), "reset", None)
     if callable(reset):
         reset()
