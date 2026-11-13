@@ -1,7 +1,5 @@
 """Configuration for the MuJoCo Gen3 LeRobot wrapper."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from lerobot.robots.config import RobotConfig

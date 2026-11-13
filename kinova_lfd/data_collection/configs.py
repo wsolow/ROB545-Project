@@ -1,7 +1,5 @@
 """Configuration for Gen3 LeRobot demonstration recording."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 

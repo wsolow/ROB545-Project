@@ -5,8 +5,6 @@ Gen3 task on top of the 30 Hz UDP environment.
 Written by Will Solow, 2026
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

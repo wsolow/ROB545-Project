@@ -1,7 +1,5 @@
 """RSL-RL policy action source for MuJoCo Gen3 recording."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

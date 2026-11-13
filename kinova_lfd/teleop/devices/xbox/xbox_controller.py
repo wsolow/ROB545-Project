@@ -1,18 +1,13 @@
-from __future__ import annotations
-
 import select
 import threading
 import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from evdev import InputDevice, ecodes, list_devices
 
 from ..device_base import DeviceBase, DeviceCfg
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
 
 
 class DPadDirection(Enum):

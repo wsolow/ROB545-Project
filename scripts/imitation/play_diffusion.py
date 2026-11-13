@@ -15,8 +15,6 @@ Example::
 Written by Will Solow, 2026.
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 import time
@@ -161,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
 
     mj_viewer = None
     if args.view_mujoco and robot.env is not None:
-        from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+        from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
         mj_viewer = MjViewer(
             robot.env,

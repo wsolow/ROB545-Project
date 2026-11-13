@@ -6,7 +6,7 @@
 """Sub-module containing utilities for various math operations."""
 
 # needed to import for allowing type-hinting: torch.Tensor | np.ndarray
-from __future__ import annotations
+
 
 import logging
 import math

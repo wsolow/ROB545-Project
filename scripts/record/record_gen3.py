@@ -13,8 +13,6 @@ Example::
 Written by Will Solow, 2026.
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 

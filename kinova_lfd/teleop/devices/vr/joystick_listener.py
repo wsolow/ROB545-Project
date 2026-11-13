@@ -1,13 +1,12 @@
 import json
 import threading
-from typing import Any, Dict, Optional
+from typing import Any
 
 import zmq
 
 
 class VRJoystickListener:
-    """
-    Background ZMQ SUB listener that always keeps the latest decoded message.
+    """Background ZMQ SUB listener that always keeps the latest decoded message.
 
     - Binds to tcp://host:port (publisher connects to us).
     - Expects each message to be a single JSON object.
@@ -21,7 +20,7 @@ class VRJoystickListener:
         self._sock.setsockopt_string(zmq.SUBSCRIBE, "")
 
         self._lock = threading.Lock()
-        self._latest: Optional[Dict[str, Any]] = None
+        self._latest: dict[str, Any] | None = None
         self._running = True
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -51,9 +50,8 @@ class VRJoystickListener:
             with self._lock:
                 self._latest = data
 
-    def read_latest(self) -> Optional[Dict[str, Any]]:
-        """
-        Return the most recent decoded message dict, or None if nothing seen yet.
+    def read_latest(self) -> dict[str, Any] | None:
+        """Return the most recent decoded message dict, or None if nothing seen yet.
 
         The message is returned as-is; you can access:
             state["headset"]
@@ -77,10 +75,4 @@ class VRJoystickListener:
 
 
 def joystick_listener(host: str = "0.0.0.0", port: int = 5555) -> VRJoystickListener:
-    """
-    Convenience factory to match the requested API:
-
-        j = joystick_listener(host, port)
-        state = j.read_latest()
-    """
     return VRJoystickListener(host=host, port=port)

@@ -1,6 +1,4 @@
-"""VR headset controller for Oculus"""
-
-from __future__ import annotations
+"""VR headset controller for Oculus."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +15,20 @@ from kinova_lfd.core.np_math import (
 
 from ..device_base import DeviceBase, DeviceCfg
 from .joystick_listener import VRJoystickListener
+
+
+@dataclass
+class VRHeadsetCfg(DeviceCfg):
+    """Configuration for VR Joystick."""
+
+    gripper_term: bool = True
+    pos_sensitivity: float = 0.4
+    rot_sensitivity: float = 0.8
+    headset_offset: float = 0.5
+    retargeters: None = None
+    host: str = "192.168.2.33"
+    port: int = 5555
+    reference_frame: str = "tcp"  # or base
 
 
 class VRHeadset(DeviceBase):
@@ -234,21 +246,6 @@ class VRHeadset(DeviceBase):
     def add_callback(self, key: Any, func: Callable) -> None:
         """Handle callback."""
         ...
-
-
-@dataclass
-class VRHeadsetCfg(DeviceCfg):
-    """Configuration for VR Joystick."""
-
-    gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
-    headset_offset: float = 0.5
-    retargeters: None = None
-    class_type: type[DeviceBase] = VRHeadset
-    host: str = "192.168.2.33"
-    port: int = 5555
-    reference_frame: str = "tcp"  # or base
 
 
 def convert_unity_to_world_coordinates(pose):

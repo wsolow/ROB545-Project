@@ -25,7 +25,7 @@ from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.tensor_math import quat_apply, quat_apply_inverse, quat_inv, quat_mul
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.mujoco.configclass import configclass
-from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
 
 @configclass

@@ -1,7 +1,5 @@
 """Episode orchestration for Gen3 demonstration recording."""
 
-from __future__ import annotations
-
 import logging
 from pprint import pformat
 
@@ -113,7 +111,7 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
             teleop.connect()
 
         if cfg.view_mujoco and getattr(robot, "name", None) == "mj_gen3" and robot.env is not None:
-            from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+            from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
             mj_viewer = MjViewer(
                 robot.env,

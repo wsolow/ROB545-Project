@@ -1,7 +1,5 @@
 """Curriculum scheduling for the MuJoCo lift-cube task."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from kinova_lfd.envs.base.mujoco.configclass import configclass

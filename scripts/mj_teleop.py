@@ -5,8 +5,6 @@ Script to run a keyboard or joystick teleoperation with Mujoco manipulation envi
 Written by Will Solow, 2026.
 """
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
@@ -15,7 +13,7 @@ import numpy as np
 import torch
 
 # from kinova_lfd.envs.base.mujoco.viewer import NativeMujocoViewer
-from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 from kinova_lfd.envs.factory import create_env
 from kinova_lfd.teleop.devices import (
     Se3Keyboard,

@@ -9,8 +9,6 @@ matrices. Camera twist is mapped to the TCP/tool frame using the fixed
 wrist-camera -> pinch_site extrinsic from the Gen3 MJCF.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -384,13 +382,19 @@ class IBVSController:
         return corners_px, s, z
 
     def _clip_twist(self, v_tcp: np.ndarray, w_tcp: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Scale the full 6D twist uniformly so both speed limits hold.
+
+        Clipping linear and angular parts independently changes the twist
+        direction and breaks the translation/rotation coupling IBVS relies on.
+        """
+        scale = 1.0
         lin_norm = np.linalg.norm(v_tcp)
         if lin_norm > self.max_lin_vel > 0:
-            v_tcp = v_tcp * (self.max_lin_vel / lin_norm)
+            scale = min(scale, self.max_lin_vel / lin_norm)
         ang_norm = np.linalg.norm(w_tcp)
         if ang_norm > self.max_ang_vel > 0:
-            w_tcp = w_tcp * (self.max_ang_vel / ang_norm)
-        return v_tcp, w_tcp
+            scale = min(scale, self.max_ang_vel / ang_norm)
+        return v_tcp * scale, w_tcp * scale
 
     def _ibvs_twist(self, rgb: np.ndarray, depth: np.ndarray | None) -> np.ndarray:
         features = self.extract_features(rgb, depth)
@@ -413,13 +417,13 @@ class IBVSController:
             e[2 * i + 1] = float(s[i, 1] - self.s_star[i, 1])
 
         self._last_error_norm = float(np.linalg.norm(e))
-        if self.use_angular:
-            v_cam = -self.lambda_gain * np.linalg.pinv(L) @ e  # (6,)
-        else:
-            # Translation-only: avoid early wx/wy tilt from angular columns of L.
-            v_lin = -self.lambda_gain * np.linalg.pinv(L[:, :3]) @ e
-            v_cam = np.zeros(6)
-            v_cam[:3] = v_lin
+        # Full 6-DOF is ill-conditioned for a small planar target: vx/wy and vy/wx
+        # produce nearly identical feature motion (cond(L) ~ 1e3), so pinv(L)
+        # amplifies pixel noise into large tilts. With use_angular, control only
+        # wz (optical axis) alongside translation; wx/wy stay zero.
+        cols = [0, 1, 2, 5] if self.use_angular else [0, 1, 2]
+        v_cam = np.zeros(6)
+        v_cam[cols] = -self.lambda_gain * np.linalg.pinv(L[:, cols]) @ e
         v_tcp, w_tcp = camera_twist_to_tcp(v_cam[:3], v_cam[3:], self.t_cam_tcp, self.R_cam_tcp)
         v_tcp, w_tcp = self._clip_twist(v_tcp, w_tcp)
         twist = np.concatenate([v_tcp, w_tcp, [self.gripper_cmd]]).astype(np.float64)

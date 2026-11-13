@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
 
     viewer = None
     if args.view_mujoco and robot.env is not None:
-        from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+        from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
         viewer = MjViewer(robot.env, policy=None, view_wrist=True, view_tabletop=False, ignore_mjlab_keys=True)
         viewer.open_display()

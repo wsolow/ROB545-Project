@@ -10,8 +10,6 @@ positions at 1 kHz.
 Written by Will Solow, 2026
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any

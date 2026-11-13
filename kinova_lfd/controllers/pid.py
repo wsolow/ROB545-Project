@@ -1,7 +1,5 @@
 """Simple multi-dimensional PID controller for twist-based pose servoing."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import numpy as np

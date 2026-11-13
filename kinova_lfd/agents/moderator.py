@@ -3,11 +3,10 @@ from enum import IntEnum
 import numpy as np
 
 from kinova_lfd.agents.data_collector import DataLogger
+from kinova_lfd.agents.util import HOME_TCP_CART
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.teleop.devices import DeviceBase
-
-HOME_TCP_CART = np.asarray([0.25, 0.0, 0.3, np.pi, 0.0, np.pi / 2, 0.0])
 
 
 class ActionStatusCodes(IntEnum):

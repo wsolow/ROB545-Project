@@ -1,7 +1,5 @@
 """Keyboard controller for SE(3) control (standalone, no Omni/Carb dependency)."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -9,6 +7,16 @@ import numpy as np
 from pynput import keyboard as pynput_keyboard
 
 from ..device_base import DeviceBase, DeviceCfg
+
+
+@dataclass
+class Se3KeyboardCfg(DeviceCfg):
+    """Configuration for SE3 keyboard devices."""
+
+    gripper_term: bool = True
+    pos_sensitivity: float = 0.4
+    rot_sensitivity: float = 0.8
+    reference_frame: str = "base"
 
 
 class Se3Keyboard(DeviceBase):
@@ -151,13 +159,3 @@ class Se3Keyboard(DeviceBase):
             "U": np.asarray([0.0, 0.0, 1.0]) * self.rot_sensitivity,
             "O": np.asarray([0.0, 0.0, -1.0]) * self.rot_sensitivity,
         }
-
-
-@dataclass
-class Se3KeyboardCfg(DeviceCfg):
-    """Configuration for SE3 keyboard devices."""
-
-    gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
-    reference_frame: str = "base"

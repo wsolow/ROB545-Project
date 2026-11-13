@@ -1,7 +1,5 @@
 """Non-overlapping episode keyboard controls for Gen3 recording."""
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 

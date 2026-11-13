@@ -1,7 +1,5 @@
 """Factories for Gen3 robots and stock LeRobot teleoperators."""
 
-from __future__ import annotations
-
 import logging
 
 from lerobot.robots import Robot, RobotConfig, make_robot_from_config

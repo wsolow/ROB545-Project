@@ -1,7 +1,5 @@
 """Realtime overlapping action-chunk control for DiffusionPolicy rollouts."""
 
-from __future__ import annotations
-
 import math
 import threading
 import time

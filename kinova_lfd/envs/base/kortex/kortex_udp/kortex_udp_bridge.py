@@ -5,8 +5,6 @@ They never open a Kortex session. The C++ process owns TCP session setup and the
 1 kHz UDP cyclic socket.
 """
 
-from __future__ import annotations
-
 import os
 import queue
 import socket
@@ -102,7 +100,7 @@ def _cyclic_view(sample: FeedbackSample) -> _Attr:
 class KortexBaseProxy:
     """Stand-in for ``BaseClient``. Commands are forwarded to the C++ process."""
 
-    def __init__(self, bridge: KortexUDPBridge) -> None:
+    def __init__(self, bridge) -> None:
         """Bind the proxy to a running bridge."""
         self._bridge = bridge
 
@@ -141,7 +139,7 @@ class KortexCyclicProxy:
     that packet at 1 kHz. These methods return the newest feedback sample.
     """
 
-    def __init__(self, bridge: KortexUDPBridge) -> None:
+    def __init__(self, bridge) -> None:
         """Bind the proxy to a running bridge."""
         self._bridge = bridge
 

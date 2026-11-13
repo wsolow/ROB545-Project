@@ -6,7 +6,7 @@
 """Sub-module containing utilities for working with different array backends."""
 
 # needed to import for allowing type-hinting: torch.device | str | None
-from __future__ import annotations
+
 
 from typing import Union
 

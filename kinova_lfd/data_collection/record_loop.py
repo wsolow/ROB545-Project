@@ -1,7 +1,5 @@
 """Fixed-rate record loop for Gen3 LeRobot robots."""
 
-from __future__ import annotations
-
 import logging
 import time
 from typing import Any

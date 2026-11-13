@@ -1,7 +1,5 @@
 """Processors bridging stock LeRobot EE teleops to Gen3 TWIST_TCP actions."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 from lerobot.configs import FeatureType, PipelineFeatureType, PolicyFeature

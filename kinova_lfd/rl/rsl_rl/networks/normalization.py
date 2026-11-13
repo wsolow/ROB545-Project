@@ -5,7 +5,6 @@
 
 # Copyright (c) 2020 Preferred Networks, Inc.
 
-from __future__ import annotations
 
 import torch
 from torch import nn

@@ -70,7 +70,7 @@ select = [
     "D",         # pydocstyle: Enforces docstring format (helps with type hints)
     "E", "W",    # pycodestyle: Standard PEP 8 errors & warnings
     "F",         # Pyflakes: Detects undefined variables, unused imports, etc.
-    "FA",        # flake8-future-annotations: Encourages `from __future__ import annotations`
+    "FA",        # flake8-future-annotations: Encourages ``
     "B",         # flake8-bugbear: Finds likely bugs & design issues
     "SIM",       # flake8-simplify: Simplifies redundant expressions
     "TC",        # flake8-type-checking: Encourages proper `TYPE_CHECKING` usage

@@ -11,7 +11,7 @@ import sys
 
 import torch
 
-from kinova_lfd.envs.base.mujoco.viewer import MjViewer
+from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 from kinova_lfd.envs.factory import create_env
 from kinova_lfd.rl.cfg import cli_args
 from kinova_lfd.rl.cfg.rsl_rl_cfg import RslRlBaseRunnerCfg

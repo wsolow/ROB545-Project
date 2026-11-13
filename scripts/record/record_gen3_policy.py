@@ -1,7 +1,5 @@
 """Record successful Gen3 lift-cube episodes from an RSL-RL policy."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 

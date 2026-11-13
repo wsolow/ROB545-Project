@@ -1,6 +1,4 @@
-"""VR joystick controller for Oculus"""
-
-from __future__ import annotations
+"""VR joystick controller for Oculus."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +10,19 @@ from kinova_lfd.core.np_math import base_to_tcp_twist, euler_xyz_to_rotvec
 
 from ..device_base import DeviceBase, DeviceCfg
 from .joystick_listener import VRJoystickListener
+
+
+@dataclass
+class VRJoystickCfg(DeviceCfg):
+    """Configuration for VR Joystick."""
+
+    gripper_term: bool = True
+    pos_sensitivity: float = 0.4
+    rot_sensitivity: float = 0.8
+    retargeters: None = None
+    host: str = "192.168.2.33"
+    port: int = 5555
+    reference_frame: str = "base"  # or base
 
 
 class VRJoystick(DeviceBase):
@@ -117,19 +128,4 @@ class VRJoystick(DeviceBase):
                 self._close_gripper = not self._close_gripper
 
     def add_callback(self, key: Any, func: Callable):
-        """Callback function."""
         pass
-
-
-@dataclass
-class VRJoystickCfg(DeviceCfg):
-    """Configuration for VR Joystick."""
-
-    gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
-    retargeters: None = None
-    class_type: type[DeviceBase] = VRJoystick
-    host: str = "192.168.2.33"
-    port: int = 5555
-    reference_frame: str = "base"  # or base

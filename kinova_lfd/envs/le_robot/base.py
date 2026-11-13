@@ -1,7 +1,5 @@
 """Shared LeRobot Robot base wrapping KinovaLfD Gen3 gym environments."""
 
-from __future__ import annotations
-
 from functools import cached_property
 from typing import Any
 

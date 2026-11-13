@@ -1,7 +1,5 @@
 """Gen3 keyboard teleoperator emitting TWIST_TCP actions (WASD laptop layout)."""
 
-from __future__ import annotations
-
 import logging
 from queue import Empty, Queue
 from typing import Any

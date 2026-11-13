@@ -1,7 +1,5 @@
 """Configuration for Gen3 SE(3) keyboard teleoperator."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from lerobot.teleoperators.config import TeleoperatorConfig

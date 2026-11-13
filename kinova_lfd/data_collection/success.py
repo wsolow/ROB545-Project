@@ -1,7 +1,5 @@
 """Episode success predicates for policy demonstrations."""
 
-from __future__ import annotations
-
 import torch
 
 

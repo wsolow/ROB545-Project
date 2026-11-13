@@ -3,8 +3,6 @@
 Packets are little-endian and packed. Sizes are asserted against cpp/ipc.hpp.
 """
 
-from __future__ import annotations
-
 import struct
 import time
 from dataclasses import dataclass
