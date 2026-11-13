@@ -7,6 +7,8 @@ Written by Will Solow, 2026.
 
 import argparse
 
+import numpy as np
+
 from kinova_lfd.agents import DataLogger, LfDModerator
 from kinova_lfd.envs.factory import create_env
 from kinova_lfd.teleop.devices import (
@@ -47,13 +49,13 @@ def main() -> None:
     env = create_env(args_cli.task, env_cfg)
 
     if args_cli.teleop_device.lower() == "keyboard":
-        teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=10))
+        teleop_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.15, rot_sensitivity=np.deg2rad(10)))
     elif args_cli.teleop_device.lower() == "vr_joystick":
-        teleop_interface = VRJoystick(VRJoystickCfg(pos_sensitivity=0.15, rot_sensitivity=10))
+        teleop_interface = VRJoystick(VRJoystickCfg(pos_sensitivity=0.15, rot_sensitivity=np.deg2rad(10)))
     elif args_cli.teleop_device.lower() == "vr_headset":
-        teleop_interface = VRHeadset(VRHeadsetCfg(pos_sensitivity=0.15, rot_sensitivity=10))
+        teleop_interface = VRHeadset(VRHeadsetCfg(pos_sensitivity=0.15, rot_sensitivity=np.deg2rad(10)))
     elif args_cli.teleop_device.lower() == "xbox":
-        teleop_interface = XboxController(XboxControllerCfg(pos_sensitivity=0.12, rot_sensitivity=25))
+        teleop_interface = XboxController(XboxControllerCfg(pos_sensitivity=0.12, rot_sensitivity=np.deg2rad(25)))
     else:
         raise ValueError(f"Unsupported teleop device: {args_cli.teleop_device}")
     logger = DataLogger(log_dir=args_cli.log_dir)

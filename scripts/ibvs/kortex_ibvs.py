@@ -23,7 +23,9 @@ parser.add_argument("--task", type=str, default="Kortex-TCP-Gen3-v0", choices=["
 parser.add_argument("--robot_ip", type=str, default="192.168.1.10", help="Robot IP.")
 parser.add_argument("--dt", type=float, default=1.0 / 20.0, help="Control period (s).")
 parser.add_argument("--pos-sensitivity", type=float, default=0.15, help="Teleop linear speed (m/s).")
-parser.add_argument("--rot-sensitivity", type=float, default=10.0, help="Teleop angular speed.")
+parser.add_argument(
+    "--rot-sensitivity", type=float, default=float(np.deg2rad(10.0)), help="Teleop angular speed (rad/s)."
+)
 parser.add_argument(
     "--setpoint-dir",
     type=str,

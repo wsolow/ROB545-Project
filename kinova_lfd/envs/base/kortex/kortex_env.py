@@ -442,20 +442,24 @@ class KortexEnv(GymEnv):
             deg_to_rad_wrapped(self._feedback.base.tool_pose_theta_z),
         )
 
-        # Compute tool velocity
+        # Compute tool velocity (Kortex reports angular in deg/s; expose rad/s)
         self._current_robot_tool_vel_b = np.zeros(6)
         self._current_robot_tool_vel_b[0] = self._feedback.base.tool_twist_linear_x
         self._current_robot_tool_vel_b[1] = self._feedback.base.tool_twist_linear_y
         self._current_robot_tool_vel_b[2] = self._feedback.base.tool_twist_linear_z
-        self._current_robot_tool_vel_b[3] = self._feedback.base.tool_twist_angular_x
-        self._current_robot_tool_vel_b[4] = self._feedback.base.tool_twist_angular_y
-        self._current_robot_tool_vel_b[5] = self._feedback.base.tool_twist_angular_z
+        self._current_robot_tool_vel_b[3:6] = np.deg2rad(
+            [
+                self._feedback.base.tool_twist_angular_x,
+                self._feedback.base.tool_twist_angular_y,
+                self._feedback.base.tool_twist_angular_z,
+            ]
+        )
 
         # Compute tool wrench
         self._current_robot_tool_wrench_b = np.zeros(6)
         self._current_robot_tool_wrench_b[0] = self._feedback.base.tool_external_wrench_force_x
-        self._current_robot_tool_wrench_b[1] = self._feedback.base.tool_external_wrench_force_x
-        self._current_robot_tool_wrench_b[2] = self._feedback.base.tool_external_wrench_force_x
+        self._current_robot_tool_wrench_b[1] = self._feedback.base.tool_external_wrench_force_y
+        self._current_robot_tool_wrench_b[2] = self._feedback.base.tool_external_wrench_force_z
         self._current_robot_tool_wrench_b[3] = self._feedback.base.tool_external_wrench_torque_x
         self._current_robot_tool_wrench_b[4] = self._feedback.base.tool_external_wrench_torque_y
         self._current_robot_tool_wrench_b[5] = self._feedback.base.tool_external_wrench_torque_z

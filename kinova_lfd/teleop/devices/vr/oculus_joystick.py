@@ -119,11 +119,11 @@ class VRJoystick(DeviceBase):
             if s["right_controller"]["inputs"]["trigger"] > 0.05:
                 self._delta_pos[2] = -s["right_controller"]["inputs"]["trigger"] * self.pos_sensitivity
 
-            self._delta_rot[0] = -s["left_controller"]["inputs"]["joystick"][1] * self.pos_sensitivity
-            self._delta_rot[1] = -s["left_controller"]["inputs"]["joystick"][0] * self.pos_sensitivity
-            self._delta_rot[2] = s["left_controller"]["inputs"]["grip"] * self.pos_sensitivity
+            self._delta_rot[0] = -s["left_controller"]["inputs"]["joystick"][1] * self.rot_sensitivity
+            self._delta_rot[1] = -s["left_controller"]["inputs"]["joystick"][0] * self.rot_sensitivity
+            self._delta_rot[2] = s["left_controller"]["inputs"]["grip"] * self.rot_sensitivity
             if s["left_controller"]["inputs"]["trigger"] > 0.05:
-                self._delta_rot[2] = -s["left_controller"]["inputs"]["trigger"] * self.pos_sensitivity
+                self._delta_rot[2] = -s["left_controller"]["inputs"]["trigger"] * self.rot_sensitivity
             if s["right_controller"]["inputs"]["A_button"]:
                 self._close_gripper = not self._close_gripper
 

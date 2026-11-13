@@ -105,6 +105,8 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         Args:
             actions: Setpoint, with the gripper opening in the last element.
             action_spec: ``JOINTS_POS``, ``TWIST_TCP``, or ``None`` for joint positions.
+                Joint positions are radians; twists are m/s and rad/s (angular is converted to
+                the deg/s the bridge expects).
             duration: Requested joint-trajectory time in seconds. The controller
                 lengthens it when velocity or acceleration limits would be exceeded.
 
@@ -120,7 +122,9 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         if action_spec == ActionSpec.TWIST_TCP:
             if actions.size < 7:
                 raise ValueError("twist actions are 6 twist values plus a gripper opening")
-            self.kortex.send_twist(actions[:6], gripper)
+            twist = np.array(actions[:6], dtype=np.float64)
+            twist[3:6] = np.rad2deg(twist[3:6])
+            self.kortex.send_twist(twist, gripper)
             return
         raise ValueError(f"KortexUDPEnv accepts JOINTS_POS and TWIST_TCP, received {action_spec!r}")
 

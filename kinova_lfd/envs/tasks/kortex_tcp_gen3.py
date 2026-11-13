@@ -266,7 +266,8 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
         """Publish a twist in the tcp frame to the robot twist controller.
 
         Args:
-            twist: Cartesian twist command (velocity) in XYZ (linear) and RPY (angular).
+            twist: Tool-frame twist, linear in m/s and angular in rad/s. The angular part is
+                converted to deg/s, the unit Kortex ``TwistCommand`` expects.
 
         """
         command = Base_pb2.TwistCommand()
@@ -277,9 +278,10 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
         twist_cmd.linear_x = twist[0]
         twist_cmd.linear_y = twist[1]
         twist_cmd.linear_z = twist[2]
-        twist_cmd.angular_x = twist[3]
-        twist_cmd.angular_y = twist[4]
-        twist_cmd.angular_z = twist[5]
+        angular_deg_s = np.rad2deg(twist[3:6])
+        twist_cmd.angular_x = angular_deg_s[0]
+        twist_cmd.angular_y = angular_deg_s[1]
+        twist_cmd.angular_z = angular_deg_s[2]
         self.kortex.SendTwistCommand(command)
 
     def _publish_tcp_cart_spec(self, tcp_cart: np.ndarray, duration: float = 5) -> None:

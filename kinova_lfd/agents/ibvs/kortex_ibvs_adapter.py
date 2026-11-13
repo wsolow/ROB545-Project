@@ -76,8 +76,6 @@ class KortexIbvsTeleopAdapter(IbvsTeleopAdapter):
             tcp_pose[3:7], to="wxyz"
         )  # Want to change everything else to be in xyzw (mujoco etc).
         twist = np.asarray(self.controller(rgb, depth, tcp_pose=tcp_pose, dt=self.env.step_dt), dtype=np.float64)
-        # IBVSController outputs angular velocity in rad/s; Kortex TwistCommand expects deg/s.
-        twist[3:6] = np.rad2deg(twist[3:6])
 
         if self.controller.phase is GraspPhase.DONE:
             self._return_to_teleop("Grasp complete")
