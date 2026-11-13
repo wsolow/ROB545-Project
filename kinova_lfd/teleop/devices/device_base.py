@@ -16,8 +16,8 @@ class DeviceCfg:
     """Configuration for all supported teleoperation devices."""
 
     gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
+    pos_sensitivity: float = 0.15
+    rot_sensitivity: float = 0.15
     reference_frame: str = "base"
 
 

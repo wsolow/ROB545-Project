@@ -6,10 +6,10 @@ from pathlib import Path
 from lerobot.configs.dataset import DatasetRecordConfig
 from lerobot.robots import RobotConfig
 from lerobot.teleoperators import TeleoperatorConfig
-from lerobot.teleoperators.gamepad.configuration_gamepad import GamepadTeleopConfig
-from lerobot.teleoperators.keyboard.configuration_keyboard import KeyboardEndEffectorTeleopConfig
 
 from kinova_lfd.envs.le_robot import KortexTcpGen3RobotConfig, MjGen3RobotConfig
+
+from .lerobot_device import TELEOP_DEVICES, LeRobotDeviceTeleopConfig
 
 
 @dataclass
@@ -73,18 +73,16 @@ class Gen3RecordConfig:
     """Top-level recording config for a Gen3 teleoperator or RSL-RL policy."""
 
     robot: RobotConfig = field(default_factory=MjGen3RobotConfig)
-    teleop: TeleoperatorConfig | None = field(default_factory=lambda: make_teleop_config("gen3_keyboard"))
+    teleop: TeleoperatorConfig | None = field(default_factory=lambda: make_teleop_config("keyboard"))
     policy: "RslRlPolicyConfig | None" = None
     dataset: Gen3DatasetConfig = field(default_factory=Gen3DatasetConfig)
-    # Scales teleop delta_x/y/z into TCP linear twist (m/s-ish).
-    linear_scale: float = 0.15
     display_data: bool = False
     play_sounds: bool = False
-    resume: bool = False
-    # MuJoCo passive viewer (only used when robot is mj_gen3).
-    view_mujoco: bool = True
-    view_wrist: bool = True
-    view_tabletop: bool = True
+    # Live viewer: MjViewer for mj_gen3, KortexViewer camera window for kortex_tcp_gen3.
+    # Camera previews reuse the frames the robot captured for the dataset.
+    view: bool = True
+    view_wrist: bool = False
+    view_tabletop: bool = False
 
 
 @dataclass
@@ -113,21 +111,8 @@ def make_robot_config(robot_type: str, **overrides) -> RobotConfig:
     raise ValueError(f"Unknown robot type {robot_type!r}. Use 'mj_gen3' or 'kortex_tcp_gen3'.")
 
 
-def make_teleop_config(teleop_type: str, *, use_gripper: bool = True, **overrides) -> TeleoperatorConfig:
-    """Build a teleop config from a short type name."""
-    if teleop_type in ("gen3_keyboard",):
-        from kinova_lfd.data_collection.teleop import Gen3KeyboardTeleopConfig
-
-        # Gen3 keyboard owns gripper via P; ignore use_gripper / LeRobot-only kwargs.
-        overrides.pop("use_gripper", None)
-        return Gen3KeyboardTeleopConfig(**overrides)
-    if teleop_type in ("keyboard_ee", "keyboard"):
-        return KeyboardEndEffectorTeleopConfig(use_gripper=use_gripper, **overrides)
-    if teleop_type in ("gamepad", "xbox"):
-        return GamepadTeleopConfig(use_gripper=use_gripper, **overrides)
-    raise ValueError(f"Unknown teleop type {teleop_type!r}. Use 'gen3_keyboard', 'keyboard_ee', or 'gamepad'.")
-
-
-def teleop_emits_twist_tcp(teleop: TeleoperatorConfig | None) -> bool:
-    """True if the teleop already produces Gen3 TWIST_TCP action keys."""
-    return teleop is not None and getattr(teleop, "type", None) == "gen3_keyboard"
+def make_teleop_config(teleop_type: str, **overrides) -> LeRobotDeviceTeleopConfig:
+    """Build a teleop config for a repo device (``"keyboard"`` or ``"xbox"``)."""
+    if teleop_type not in TELEOP_DEVICES:
+        raise ValueError(f"Unknown teleop type {teleop_type!r}. Use one of {TELEOP_DEVICES}.")
+    return LeRobotDeviceTeleopConfig(device=teleop_type, **overrides)

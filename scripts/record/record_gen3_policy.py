@@ -10,7 +10,6 @@ from kinova_lfd.data_collection import (
     make_policy_config,
     make_robot_config,
     record,
-    register_gen3_robots,
 )
 
 
@@ -33,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--success-delta", type=float, default=0.1, help="Maximum cube-goal distance in meters.")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--no-video", action="store_true")
-    parser.add_argument("--view-mujoco", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--view", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--view-wrist", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--view-tabletop", action=argparse.BooleanOptionalAction, default=False)
     return parser
@@ -42,7 +41,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Run policy-driven recording."""
     args = build_parser().parse_args()
-    register_gen3_robots()
     dataset_name = find_available_dataset_name(args.dataset_name)
     if dataset_name != args.dataset_name:
         print(f"Dataset {args.dataset_name!r} already exists; using {dataset_name!r}.")
@@ -54,7 +52,6 @@ def main() -> int:
         use_wrist_camera=True,
         use_tabletop_camera=True,
         action_spec="JOINTS_POS",
-        physics_steps_per_action=1,
     )
     cfg = Gen3RecordConfig(
         robot=robot,
@@ -75,7 +72,7 @@ def main() -> int:
             num_episodes=args.num_episodes,
             video=not args.no_video,
         ),
-        view_mujoco=args.view_mujoco,
+        view=args.view,
         view_wrist=args.view_wrist,
         view_tabletop=args.view_tabletop,
     )

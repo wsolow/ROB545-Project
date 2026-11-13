@@ -25,7 +25,7 @@ class MjGen3RobotConfig(RobotConfig):
     # Action mode forwarded to Kinova ``ActionSpec``
     action_spec: str = "TWIST_TCP"
 
-    # MuJoCo env.dt is ~4 ms; recording often runs at 20 Hz wall clock. Repeat
-    # env.step this many times per send_action so sim time tracks wall time.
-    # record_gen3 sets max(1, round((1/fps) / 0.004)). Direct teleop leaves 1.
-    physics_steps_per_action: int = 1
+    # Wall-clock control period (s), matching ``KortexTcpGen3RobotConfig.dt``. On connect,
+    # send_action repeats env.step round(dt / env.step_dt) times so sim time tracks wall
+    # time. None -> one env.step per action (e.g. policies trained at env.step_dt).
+    dt: float | None = None

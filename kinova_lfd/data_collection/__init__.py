@@ -9,15 +9,16 @@ from .configs import (
     make_robot_config,
     make_teleop_config,
 )
-from .factories import make_robot, make_teleop, register_gen3_robots
+from .factories import make_robot, make_teleop, make_viewer
+from .lerobot_device import TELEOP_DEVICES, LeRobotDeviceTeleop, LeRobotDeviceTeleopConfig
 from .record import record
-from .teleop import Gen3KeyboardTeleop, Gen3KeyboardTeleopConfig
 
 __all__ = [
+    "TELEOP_DEVICES",
     "Gen3DatasetConfig",
-    "Gen3KeyboardTeleop",
-    "Gen3KeyboardTeleopConfig",
     "Gen3RecordConfig",
+    "LeRobotDeviceTeleop",
+    "LeRobotDeviceTeleopConfig",
     "RslRlPolicyConfig",
     "find_available_dataset_name",
     "make_policy_config",
@@ -25,6 +26,6 @@ __all__ = [
     "make_robot_config",
     "make_teleop",
     "make_teleop_config",
+    "make_viewer",
     "record",
-    "register_gen3_robots",
 ]

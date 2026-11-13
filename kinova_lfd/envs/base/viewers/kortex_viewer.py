@@ -19,7 +19,7 @@ import numpy as np
 
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
-from kinova_lfd.envs.base.viewers.recorder import Preview, RgbdFrame
+from kinova_lfd.envs.base.viewers.recorder import Preview, RgbdFrame, as_rgbd_frame
 from kinova_lfd.teleop.devices.device_base import DeviceBase
 
 
@@ -42,9 +42,13 @@ class KortexViewer:
     """Run a policy on a Kortex env and preview the robot cameras in OpenCV windows.
 
     The env paces itself to ``cfg.dt`` inside ``step``, so the control loop runs at
-    the env rate. Camera frames are pulled and drawn on a separate daemon thread so
-    the blocking RealSense ``wait_for_frames`` never stalls the control loop. The
-    preview thread is the only caller of ``env._get_latest_rgbd()``.
+    the env rate. Frames are drawn on a separate daemon thread.
+
+    With ``pull_frames=True`` (default, used by :meth:`run`) the preview thread fetches
+    frames itself, so the blocking RealSense ``wait_for_frames`` never stalls the control
+    loop, and it is the only caller of ``env._get_latest_rgbd()``. With
+    ``pull_frames=False`` (external loops that already read the cameras, e.g. LeRobot
+    recording) the viewer never touches the cameras; pass frames to :meth:`sync_display`.
     """
 
     def __init__(
@@ -57,6 +61,7 @@ class KortexViewer:
         preview_height: int = 360,
         record_key: str | None = "v",
         video_dir: str | Path = "exp/ibvs_videos",
+        pull_frames: bool = True,
     ) -> None:
         """Initialize the viewer.
 
@@ -70,6 +75,8 @@ class KortexViewer:
             preview_height: Height (px) of each camera pane.
             record_key: Key that toggles video recording, or ``None`` to disable recording.
             video_dir: Directory where recorded videos are saved.
+            pull_frames: Fetch frames from the env on the preview thread. Set ``False`` when
+                the caller already reads the cameras and pushes frames via :meth:`sync_display`.
 
         """
         self.env = env
@@ -79,14 +86,14 @@ class KortexViewer:
         view_tabletop_ok = view_tabletop and bool(getattr(cfg, "use_tabletop_camera", False))
 
         # Pull mode: the preview thread fetches frames itself, so the blocking RealSense
-        # ``wait_for_frames`` never stalls the control loop.
+        # ``wait_for_frames`` never stalls the control loop. Push mode: sync_display supplies them.
         self._preview = Preview(
             "Kortex Cameras",
             view_wrist=view_wrist_ok,
             view_tabletop=view_tabletop_ok,
             fps=preview_fps,
             height=preview_height,
-            frame_source=self._fetch_frames,
+            frame_source=self._fetch_frames if pull_frames else None,
             annotate_wrist=getattr(policy, "annotate_wrist", None),
             record_key=record_key,
             video_dir=video_dir,
@@ -122,8 +129,12 @@ class KortexViewer:
             start()
         self._preview.start()
 
-    def sync_display(self) -> bool:
-        """Publish the policy status to the preview thread.
+    def sync_display(self, wrist: Any | None = None, tabletop: Any | None = None) -> bool:
+        """Publish the policy status, and any pushed camera frames, to the preview thread.
+
+        Args:
+            wrist: Already-captured wrist RGB image (push mode). Ignored in pull mode.
+            tabletop: Already-captured tabletop RGB image (push mode). Ignored in pull mode.
 
         Returns:
             ``False`` once a preview window has been closed, else ``True``.
@@ -132,7 +143,11 @@ class KortexViewer:
         if self._preview.closed:
             self._preview.stop()
             return False
-        self._preview.set_status(str(getattr(self.policy, "status_text", "")))
+        self._preview.publish(
+            wrist=as_rgbd_frame(wrist) if self._preview.view_wrist else None,
+            tabletop=as_rgbd_frame(tabletop) if self._preview.view_tabletop else None,
+            status=str(getattr(self.policy, "status_text", "")),
+        )
         return True
 
     def close_display(self) -> None:

@@ -17,6 +17,12 @@ class MjGen3Robot(Gen3LfDRobot):
         self.config: MjGen3RobotConfig = config
         self.task_name = config.task_name
 
+    def connect(self, calibrate: bool = True) -> None:
+        super().connect(calibrate)
+        assert self.env is not None
+        if self.config.dt is not None:
+            self._steps_per_action = max(1, round(self.config.dt / self.env.step_dt))
+
     def _env_cfg_dict(self) -> dict[str, Any]:
         return {
             "enable_cameras": self.config.enable_cameras,

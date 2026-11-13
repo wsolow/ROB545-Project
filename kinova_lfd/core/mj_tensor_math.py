@@ -12,16 +12,11 @@ for use inside the MuJoCo environments only. Quaternions crossing the MjEnv boun
 (torch) or :mod:`kinova_lfd.core.np_math` (numpy), which use (x, y, z, w).
 """
 
-import logging
 import math
 from typing import Literal
 
-import numpy as np
 import torch
 import torch.nn.functional
-
-# import logger
-logger = logging.getLogger(__name__)
 
 """
 General

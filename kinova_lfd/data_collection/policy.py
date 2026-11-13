@@ -1,17 +1,39 @@
-"""RSL-RL policy action source for MuJoCo Gen3 recording."""
+"""RSL-RL policy action source and lift-cube success checks for MuJoCo Gen3 recording.
+
+The RSL-RL stack is imported lazily in :meth:`RslRlPolicySource.connect`, so the success
+helpers can be imported cheaply (e.g. by diffusion playback).
+"""
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
 from kinova_lfd.envs.le_robot.base import JOINT_ACTION_KEYS
-from kinova_lfd.rl.cfg.default_rsl_rl import make_default_rsl_rl_cfg
-from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
-from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
-from kinova_lfd.rl.util.hydra import _load_agent_cfg
 
 from .configs import RslRlPolicyConfig
+
+if TYPE_CHECKING:
+    from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
+    from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
+
+
+def cube_goal_success(cube_pose: torch.Tensor, goal_pose: torch.Tensor, delta: float) -> bool:
+    """Return whether the first cube position is within ``delta`` of its goal."""
+    if cube_pose.ndim != 2 or goal_pose.ndim != 2 or cube_pose.shape[0] == 0 or goal_pose.shape[0] == 0:
+        raise ValueError("Cube and goal poses must be non-empty batched tensors.")
+    distance = torch.linalg.vector_norm(cube_pose[0, :3] - goal_pose[0, :3]).item()
+    return distance <= delta
+
+
+def policy_episode_succeeded(robot: Any, success_delta: float) -> bool:
+    """Return whether the robot env's final lift-cube position is within ``success_delta`` of the goal."""
+    env = getattr(robot, "env", None)
+    cube_pose = getattr(env, "last_cube_pose_w", getattr(env, "cube_pose_w", None))
+    goal_pose = getattr(env, "last_cube_goal_pose_w", getattr(env, "cube_goal_pose_w", None))
+    if cube_pose is None or goal_pose is None:
+        raise TypeError("Automatic policy success is only supported by MjGen3LiftCubeEnv.")
+    return cube_goal_success(cube_pose, goal_pose, success_delta)
 
 
 class RslRlPolicySource:
@@ -37,6 +59,11 @@ class RslRlPolicySource:
             raise RuntimeError("Connect the robot before connecting the policy source.")
         if self.robot.task_name != self.config.task:
             raise ValueError(f"Policy task {self.config.task!r} does not match robot task {self.robot.task_name!r}.")
+
+        from kinova_lfd.rl.cfg.default_rsl_rl import make_default_rsl_rl_cfg
+        from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
+        from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
+        from kinova_lfd.rl.util.hydra import _load_agent_cfg
 
         self.policy_env = RslRlVecEnvWrapper(self.robot.env, clip_actions=self.config.clip_actions)
         agent_cfg = _load_agent_cfg(self.config.agent)
@@ -70,10 +97,6 @@ class RslRlPolicySource:
         """Reset recurrent inference state when the policy provides it."""
         if self.runner is not None and hasattr(self.runner.alg.policy, "reset"):
             self.runner.alg.policy.reset()
-
-    def on_episode_end(self) -> None:
-        """Hook used by the recorder between accepted and discarded attempts."""
-        self.reset()
 
     def get_action(self) -> dict[str, float]:
         """Infer one joint-position action from the current native task observation."""

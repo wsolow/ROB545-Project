@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from pathlib import Path
-from typing import override
+from typing import Any, override
 
 import mujoco
 import torch
@@ -17,7 +17,7 @@ from mjlab.viewer.native.viewer import PlotCfg
 
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
-from kinova_lfd.envs.base.viewers.recorder import Preview
+from kinova_lfd.envs.base.viewers.recorder import Preview, as_rgbd_frame
 from kinova_lfd.teleop.devices.device_base import DeviceBase
 
 # mjlab binds these to debug toggles; teleop policies use them to move the arm / gripper.
@@ -140,13 +140,23 @@ class MjViewer(NativeMujocoViewer):
         """
         self.setup()
 
-    def sync_display(self) -> bool:
-        """Submit camera previews and refresh the passive viewer without waiting for GUI work."""
+    def sync_display(self, wrist: Any | None = None, tabletop: Any | None = None) -> bool:
+        """Submit camera previews and refresh the passive viewer without waiting for GUI work.
+
+        Args:
+            wrist: Already-captured wrist RGB image (e.g. from the robot observation). Shown
+                as-is instead of re-rendering the camera; ``None`` renders it from the env.
+            tabletop: Same as ``wrist`` for the tabletop camera.
+
+        Returns:
+            ``False`` once the MuJoCo window has been closed, else ``True``.
+
+        """
         if self.viewer is None or not self.is_running():
             self._viewer_closed = True
             self._preview.stop()
             return False
-        self._update_camera_previews()
+        self._update_camera_previews(wrist=wrist, tabletop=tabletop)
         self.sync_env_to_viewer()
         return True
 
@@ -171,14 +181,23 @@ class MjViewer(NativeMujocoViewer):
         """Whether the MuJoCo window was closed by the user."""
         return self._viewer_closed
 
-    def _update_camera_previews(self) -> None:
-        """Publish the latest RGB-D frames and policy status to the preview thread."""
+    def _update_camera_previews(self, wrist: Any | None = None, tabletop: Any | None = None) -> None:
+        """Publish camera frames and policy status to the preview thread.
+
+        Frames passed in (already-captured RGB images) are used directly; cameras without
+        one are rendered from the env.
+        """
         if not self._preview.enabled:
             return
         env = self.env.unwrapped
+        wrist_frame = tabletop_frame = None
+        if self._preview.view_wrist:
+            wrist_frame = as_rgbd_frame(wrist) if wrist is not None else env._get_latest_rgbd_wrist()
+        if self._preview.view_tabletop:
+            tabletop_frame = as_rgbd_frame(tabletop) if tabletop is not None else env._get_latest_rgbd()
         self._preview.publish(
-            wrist=env._get_latest_rgbd_wrist() if self._preview.view_wrist else None,
-            tabletop=env._get_latest_rgbd() if self._preview.view_tabletop else None,
+            wrist=wrist_frame,
+            tabletop=tabletop_frame,
             status=str(getattr(self.policy, "status_text", "")),
         )
 

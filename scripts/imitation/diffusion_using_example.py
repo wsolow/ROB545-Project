@@ -5,7 +5,7 @@ import time
 import torch
 from lerobot.policies.utils import build_inference_frame, make_robot_action
 
-from kinova_lfd.data_collection import make_robot, make_robot_config, register_gen3_robots
+from kinova_lfd.data_collection import make_robot, make_robot_config
 from kinova_lfd.imitation.play import load_diffusion_policy, load_play_features, policy_image_keys
 
 
@@ -39,7 +39,6 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
 
-    register_gen3_robots()
     model, preprocessor, postprocessor, pretrained_dir = load_diffusion_policy(
         args.checkpoint,
         device=str(device),
@@ -63,7 +62,6 @@ def main(argv: list[str] | None = None) -> int:
         use_wrist_camera=True,
         use_tabletop_camera=False,
         action_spec="JOINTS_POS",
-        physics_steps_per_action=1,
     )
     robot = make_robot(robot_config)
     robot.connect()

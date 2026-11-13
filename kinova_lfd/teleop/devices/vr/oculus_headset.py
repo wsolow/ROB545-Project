@@ -22,8 +22,8 @@ class VRHeadsetCfg(DeviceCfg):
     """Configuration for VR Joystick."""
 
     gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
+    pos_sensitivity: float = 0.15
+    rot_sensitivity: float = 0.15
     headset_offset: float = 0.5
     retargeters: None = None
     host: str = "192.168.2.33"

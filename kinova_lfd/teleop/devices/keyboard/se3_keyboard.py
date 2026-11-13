@@ -14,8 +14,8 @@ class Se3KeyboardCfg(DeviceCfg):
     """Configuration for SE3 keyboard devices."""
 
     gripper_term: bool = True
-    pos_sensitivity: float = 0.4
-    rot_sensitivity: float = 0.8
+    pos_sensitivity: float = 0.15
+    rot_sensitivity: float = 0.15
     reference_frame: str = "base"
 
 
@@ -29,13 +29,14 @@ class Se3Keyboard(DeviceBase):
         ============================== ================= =================
         Description                    Key (+ve axis)    Key (-ve axis)
         ============================== ================= =================
-        Toggle gripper (open/close)    R
+        Toggle gripper (open/close)    P
         Move along x-axis              W                 S
         Move along y-axis              A                 D
         Move along z-axis              Q                 E
-        Rotate along x-axis            Z                 X
-        Rotate along y-axis            T                 G
-        Rotate along z-axis            C                 V
+        Rotate along x-axis            I                 K
+        Rotate along y-axis            J                 L
+        Rotate along z-axis            U                 O
+        Reset commands                 F
         ============================== ================= =================
     """
 
@@ -87,6 +88,8 @@ class Se3Keyboard(DeviceBase):
     def reset(self):
         super().reset()
         self._close_gripper = False
+        # Keys held through a reset must not subtract their delta on release.
+        self._pressed_keys.clear()
 
     def _key_to_char(self, key) -> str | None:
         """Convert a pynput key object to an uppercase character string, or None."""
@@ -125,7 +128,7 @@ class Se3Keyboard(DeviceBase):
 
     def _on_release(self, key):
         char = self._key_to_char(key)
-        if char is None:
+        if char is None or char not in self._pressed_keys:
             return
 
         self._pressed_keys.discard(char)

@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 
+import numpy as np
 from evdev import InputDevice, ecodes, list_devices
 
 from ..device_base import DeviceBase, DeviceCfg
@@ -151,8 +152,24 @@ class XboxControllerCfg(DeviceCfg):
     start_thread: bool = False
 
 
+# Button -> meaning in standalone teleop (``LfDModerator`` reads the matching flags).
+DEFAULT_BUTTON_BINDINGS = {
+    "a": "Home",
+    "b": "Stop",
+    "start": "Resume",
+    "back": "Quit",
+    "x": "Save data (toggle)",
+    "y": "Log data (toggle)",
+    "lb": "Joint admittance (toggle)",
+}
+
+
 class XboxController(DeviceBase):
     """Poll or iterate over Xbox controller input on Linux.
+
+    ``button_bindings`` maps button names to the descriptions printed in the startup
+    banner; wrappers that reinterpret buttons (e.g. LeRobot recording) replace it
+    before :meth:`start`.
 
     Example::
 
@@ -165,44 +182,42 @@ class XboxController(DeviceBase):
     def __init__(self, cfg: XboxControllerCfg) -> None:
         super().__init__(cfg)
 
-        path = cfg.device_path or find_xbox_device(name_hint="xbox")
+        path = cfg.device_path or find_xbox_device(name_hint=cfg.name_hint)
         self._device = InputDevice(path)
         self.deadzone = cfg.deadzone
         self.state = XboxControllerState()
         self._abs_info = {code: info for code, info in self._device.capabilities().get(ecodes.EV_ABS, [])}
         self._hat_x = 0
         self._hat_y = 0
-
-        if cfg.start_thread:
-            self._listener = threading.Thread(target=self.teleop_loop, daemon=True)
-            self._listener.start()
+        # Monotonic per-button press counters, so consumers polling slower than the
+        # event rate never miss a quick tap (see ``press_count``).
+        self._press_counts: dict[str, int] = {}
 
         self._prev_x = False
         self._prev_y = False
         self._prev_rb = False
         self._prev_lb = False
-        print(self.__str__())
+        self.button_bindings: dict[str, str] = dict(DEFAULT_BUTTON_BINDINGS)
+
+        if cfg.start_thread:
+            self.start()
 
     def __str__(self) -> str:
         msg = f"Xbox Controller: {self.__class__.__name__}\n"
         msg += "\t----------------------------------------------\n"
-        msg += "\tGripper (open/close): Right Trigger or Right Button (Toggle)\n"
+        msg += "\tGripper (open/close): Right Trigger (analog) or Right Button (toggle)\n"
         msg += "\tMove arm along x-axis: L Joystick U/D\n"
         msg += "\tMove arm along y-axis: L Joystick L/R\n"
         msg += "\tMove arm along z-axis: R Joystick U/D\n"
-        msg += "\tRotate arm along x-axis: DPad U/D\n"
-        msg += "\tRotate arm along y-axis: DPad L/R\n"
-        msg += "\tRotate arm along z-axis: R Joystick L/R + L Trigger\n"
-        msg += "\tToggle Joint Admittance: Left Button\n"
-        msg += "\tHome: A Button\n"
-        msg += "\tQuit: Back Button\n"
-        msg += "\tStop: B Button\n"
-        msg += "\tResume: Start Button\n"
-        msg += "\tSave Data: X Button\n"
-        msg += "\tLog Data: Y Button\n"
+        msg += "\tRotate arm about x-axis: DPad L/R\n"
+        msg += "\tRotate arm about y-axis: DPad U/D\n"
+        msg += "\tRotate arm about z-axis: Hold L Trigger + R Joystick L/R\n"
+        for button, description in self.button_bindings.items():
+            msg += f"\t{description}: {button.upper() if len(button) <= 2 else button.capitalize()} Button\n"
         return msg
 
     def start(self) -> None:
+        print(self)
         self._listener = threading.Thread(target=self._teleop_loop, daemon=True)
         self._listener.start()
 
@@ -211,28 +226,26 @@ class XboxController(DeviceBase):
             self._update_control_state()
 
     def _update_control_state(self) -> None:
-
-        self._delta_pos[0] = -self.state.left_stick.y
-        self._delta_pos[1] = -self.state.left_stick.x
-        self._delta_pos[2] = -self.state.right_stick.y
-        # Gripper can be controlled with a button (on/off) or
+        # Gripper can be controlled with a button (RB toggle) or the analog right trigger.
         self._close_gripper = (
             not self._close_gripper if (self._prev_rb != self.state.rb and self.state.rb) else self._close_gripper
         )
         self._gripper_value = max(self.state.rt, int(self._close_gripper))
 
-        if self.state.dpad != DPadDirection.CENTER:
-            if self.state.dpad == DPadDirection.LEFT:
-                self._delta_rot[0] = -1.0
-            if self.state.dpad == DPadDirection.RIGHT:
-                self._delta_rot[0] = 1.0
-            if self.state.dpad == DPadDirection.UP:
-                self._delta_rot[1] = -1.0
-            if self.state.dpad == DPadDirection.DOWN:
-                self._delta_rot[1] = 1.0
-        else:
-            self._delta_rot[0:2] = 0.0
-        self._delta_rot[2] = -self.state.right_stick.x if self.state.lt > 0.5 else 0.0
+        delta_rot = np.zeros(3)
+        if self.state.dpad == DPadDirection.LEFT:
+            delta_rot[0] = -1.0
+        elif self.state.dpad == DPadDirection.RIGHT:
+            delta_rot[0] = 1.0
+        elif self.state.dpad == DPadDirection.UP:
+            delta_rot[1] = -1.0
+        elif self.state.dpad == DPadDirection.DOWN:
+            delta_rot[1] = 1.0
+        delta_rot[2] = -self.state.right_stick.x if self.state.lt > 0.5 else 0.0
+        delta_pos = np.array([-self.state.left_stick.y, -self.state.left_stick.x, -self.state.right_stick.y])
+        # Assign already-scaled arrays so a concurrent ``advance`` never sees unscaled values.
+        self._delta_pos = delta_pos * self.pos_sensitivity
+        self._delta_rot = delta_rot * self.rot_sensitivity
         self._home_flag = self.state.a
         self._stop_flag = self.state.b
         self._quit_flag = self.state.back
@@ -248,11 +261,12 @@ class XboxController(DeviceBase):
         self._prev_rb = self.state.rb
         self._prev_lb = self.state.lb
 
-        self._delta_pos *= self.pos_sensitivity
-        self._delta_rot *= self.rot_sensitivity
-
     def stop(self) -> None:
         self._device.close()
+
+    def press_count(self, button: str) -> int:
+        """Number of times ``button`` (e.g. ``'x'``, ``'back'``) has been pressed since construction."""
+        return self._press_counts.get(button, 0)
 
     def _apply_deadzone(self, value: float) -> float:
         return 0.0 if abs(value) < self.deadzone else value
@@ -261,6 +275,8 @@ class XboxController(DeviceBase):
         attr = _BUTTON_MAP.get(code)
         if attr is None:
             return
+        if value == 1:  # 1 = press, 0 = release, 2 = autorepeat
+            self._press_counts[attr] = self._press_counts.get(attr, 0) + 1
         if attr == "left_stick_pressed":
             self.state.left_stick.pressed = bool(value)
         elif attr == "right_stick_pressed":

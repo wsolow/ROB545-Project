@@ -213,6 +213,11 @@ RgbdFrame = dict[str, Any] | None
 FrameSource = Callable[[], tuple[RgbdFrame, RgbdFrame]]
 
 
+def as_rgbd_frame(rgb: Any) -> RgbdFrame:
+    """Wrap an already-captured RGB image (e.g. from a robot observation) as an ``RgbdFrame``."""
+    return None if rgb is None else {"rgb": rgb}
+
+
 class Preview:
     """One OpenCV window showing the wrist and tabletop cameras side by side, on its own thread.
 
