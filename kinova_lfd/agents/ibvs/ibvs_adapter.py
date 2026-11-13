@@ -12,7 +12,6 @@ from kinova_lfd.agents.ibvs.util import rgbd_to_numpy, save_setpoint_rgb
 from kinova_lfd.agents.moderator import HOME_TCP_CART
 from kinova_lfd.controllers import IBVSController
 from kinova_lfd.controllers.ibvs import GraspPhase, extract_block_corners_px
-from kinova_lfd.core.np_math import np_convert_quat
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.teleop.devices import Se3Keyboard
 

@@ -7,6 +7,9 @@ Eye-in-hand control law (Chaumette & Hutchinson / ViSP):
 where s are normalized image point features and L stacks the point interaction
 matrices. Camera twist is mapped to the TCP/tool frame using the fixed
 wrist-camera -> pinch_site extrinsic from the Gen3 MJCF.
+
+Conventions: quaternions are (x, y, z, w) and angular velocities are rad/s, matching
+the environment boundary.
 """
 
 from dataclasses import dataclass, field
@@ -18,9 +21,10 @@ import numpy as np
 from kinova_lfd.controllers.pid import PIDController, PIDGains
 
 _BRACELET_CAM_POS = np.array([0.0, -0.05639, -0.063475])
-_BRACELET_CAM_QUAT_WXYZ = np.array([0.0, 0.0, 0.0, 1.0])
+# MJCF quats ``0 0 0 1`` (wrist camera) and ``0 1 0 0`` (pinch_site), stored here as xyzw.
+_BRACELET_CAM_QUAT_XYZW = np.array([0.0, 0.0, 1.0, 0.0])
 _BRACELET_PINCH_POS = np.array([0.0, 0.0, -0.211525])
-_BRACELET_PINCH_QUAT_WXYZ = np.array([0.0, 1.0, 0.0, 0.0])
+_BRACELET_PINCH_QUAT_XYZW = np.array([1.0, 0.0, 0.0, 0.0])
 
 
 @dataclass
@@ -81,9 +85,9 @@ def get_block_hsv_preset(name: str) -> BlockHsvCfg:
     )
 
 
-def quat_wxyz_to_rotmat(quat_wxyz: np.ndarray) -> np.ndarray:
-    """Convert a (w, x, y, z) quaternion to a 3x3 rotation matrix."""
-    w, x, y, z = quat_wxyz
+def quat_xyzw_to_rotmat(quat_xyzw: np.ndarray) -> np.ndarray:
+    """Convert an (x, y, z, w) quaternion to a 3x3 rotation matrix."""
+    x, y, z, w = quat_xyzw
     return np.array(
         [
             [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
@@ -106,8 +110,8 @@ def default_cam_T_tcp() -> tuple[np.ndarray, np.ndarray]:
             camera frame (columns are TCP axes expressed in optical coordinates).
 
     """
-    R_b_c = quat_wxyz_to_rotmat(_BRACELET_CAM_QUAT_WXYZ)
-    R_b_tcp = quat_wxyz_to_rotmat(_BRACELET_PINCH_QUAT_WXYZ)
+    R_b_c = quat_xyzw_to_rotmat(_BRACELET_CAM_QUAT_XYZW)
+    R_b_tcp = quat_xyzw_to_rotmat(_BRACELET_PINCH_QUAT_XYZW)
     # Camera body frame (looks along -Z).
     R_cam_tcp = R_b_c.T @ R_b_tcp
     t_cam_tcp = R_b_c.T @ (_BRACELET_PINCH_POS - _BRACELET_CAM_POS)
@@ -231,10 +235,12 @@ def sample_depths(
     return zs
 
 
-def quat_error_rotvec(q_des_wxyz: np.ndarray, q_cur_wxyz: np.ndarray) -> np.ndarray:
-    """Rotation-vector error that rotates ``q_cur`` into ``q_des`` (both wxyz)."""
-    w0, x0, y0, z0 = q_des_wxyz
-    w1, x1, y1, z1 = q_cur_wxyz[0], -q_cur_wxyz[1], -q_cur_wxyz[2], -q_cur_wxyz[3]
+def quat_error_rotvec(q_des_xyzw: np.ndarray, q_cur_xyzw: np.ndarray) -> np.ndarray:
+    """Rotation-vector error that rotates ``q_cur`` into ``q_des`` (both xyzw)."""
+    x0, y0, z0, w0 = q_des_xyzw
+    # Conjugate of q_cur.
+    x1, y1, z1, w1 = -q_cur_xyzw[0], -q_cur_xyzw[1], -q_cur_xyzw[2], q_cur_xyzw[3]
+    # q_err = q_des * conj(q_cur), stored as (w, x, y, z) for the angle/axis extraction below.
     q_err = np.array(
         [
             w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1,
@@ -255,10 +261,10 @@ def quat_error_rotvec(q_des_wxyz: np.ndarray, q_cur_wxyz: np.ndarray) -> np.ndar
 
 
 def world_twist_to_tcp(
-    v_world: np.ndarray, w_world: np.ndarray, quat_wxyz: np.ndarray
+    v_world: np.ndarray, w_world: np.ndarray, quat_xyzw: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Express a world-frame twist in the TCP/tool frame."""
-    R = quat_wxyz_to_rotmat(quat_wxyz)
+    """Express a world-frame twist in the TCP/tool frame (``quat_xyzw`` is the TCP orientation)."""
+    R = quat_xyzw_to_rotmat(quat_xyzw)
     return R.T @ v_world, R.T @ w_world
 
 
@@ -352,7 +358,7 @@ class IBVSController:
         self.phase = GraspPhase.IBVS
         self._ibvs_ok_steps = 0
         self._close_steps = 0
-        self._pregrasp_pose: np.ndarray | None = None  # (7,) xyz + quat wxyz
+        self._pregrasp_pose: np.ndarray | None = None  # (7,) xyz + quat xyzw
         self._pose_setpoint: np.ndarray | None = None
 
     @property
@@ -489,7 +495,7 @@ class IBVSController:
     ) -> np.ndarray:
         """Compute a 7D TCP twist command ``[vx,vy,vz,wx,wy,wz,gripper]``.
 
-        ``tcp_pose`` is required after IBVS converges (7D xyz + quat wxyz).
+        ``tcp_pose`` is required after IBVS converges (7D xyz + quat xyzw).
         """
         step_dt = self.dt if dt is None else float(dt)
 

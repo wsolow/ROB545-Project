@@ -2,7 +2,7 @@ from typing import Literal
 
 import torch
 
-from kinova_lfd.core.tensor_math import euler_xyz_from_quat, quat_error_magnitude, quat_from_euler_xyz
+from kinova_lfd.core.mj_tensor_math import euler_xyz_from_quat, quat_error_magnitude, quat_from_euler_xyz
 from kinova_lfd.envs.base.mujoco.configclass import configclass
 
 

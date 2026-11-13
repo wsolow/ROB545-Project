@@ -1,6 +1,6 @@
 """data_collector.py.
 
-Controls logging of data and messages within Skillet.
+Controls logging of data and messages.
 """
 
 import pickle

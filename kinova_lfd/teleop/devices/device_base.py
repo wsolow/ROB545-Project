@@ -108,7 +108,8 @@ class DeviceBase(ABC):
         """Return the current command as a tensor.
 
         Args:
-            tcp_pose_b: TCP pose of the robot in the robot base frame.
+            tcp_pose_b: TCP pose of the robot in the robot base frame, ``[x, y, z, qx, qy, qz, qw]``
+                (xyzw quaternion). Numpy uses ``np_math`` and torch uses ``tensor_math``, both xyzw.
 
         Returns:
             np.ndarray: [x, y, z, rx, ry, rz] or [x, y, z, rx, ry, rz, gripper]

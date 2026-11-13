@@ -8,7 +8,7 @@ from mjlab.sim import MujocoCfg
 from mjlab.sim.sim import Simulation, SimulationCfg
 
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.core.tensor_math import (
+from kinova_lfd.core.mj_tensor_math import (
     quat_from_euler_xyz,
     subtract_frame_transforms,
     tf_combine,
@@ -95,6 +95,8 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self._camera_view_pending = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         self.cube_init_ranges = torch.tensor(cfg.cube_init_ranges, device=self.device)
         self.cube_xyz_b = torch.zeros((self.num_envs, 6), device=self.device)
+        # Internal pose buffers below hold mjlab-convention (w, x, y, z) quaternions; they are
+        # written to / computed from the sim directly. Only their xyz parts are read outside.
         self.cube_pose_b = torch.zeros((self.num_envs, 7), device=self.device)
         self.cube_pose_w = torch.zeros((self.num_envs, 7), device=self.device)
         self.cube_goal_xyz_b = torch.zeros((self.num_envs, 6), device=self.device)

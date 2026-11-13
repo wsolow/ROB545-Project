@@ -2,16 +2,10 @@
 
 MjViewer policy that switches between keyboard teleop and an IBVS grasp in MuJoCo.
 
-Same keys and mode logic as :class:`KortexIbvsTeleopAdapter`; only the MuJoCo-specific
-parts are overridden:
-
-- ``env._robot_tool_pose_b`` is a ``(num_envs, 7)`` torch tensor whose quaternion is
-  already wxyz (mjlab / MuJoCo convention), so it is passed to IBVSController as-is.
-  Do **not** run it through ``np_convert_quat(..., to="wxyz")``: that treats wxyz as
-  xyzw, scrambles the orientation, and makes the DESCEND/LIFT PID (world -> TCP twist)
-  move sideways once the tool has any yaw.
-- Home defaults to the TCP pose at construction (call after ``env.reset()``), since
-  ``HOME_TCP_CART`` is expressed in the real robot's base frame.
+Same keys and mode logic as :class:`IbvsTeleopAdapter`. The MjEnv returns the TCP pose
+as ``[x, y, z, qx, qy, qz, qw]`` like ``KortexEnv``, so it is passed to IBVSController
+without any quaternion conversion. ``env._robot_tool_pose_b`` is a ``(num_envs, 7)``
+torch tensor, so poses and teleop commands are converted to numpy here.
 
 Written by Will Solow, 2026.
 """

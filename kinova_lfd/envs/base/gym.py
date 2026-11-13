@@ -10,7 +10,11 @@ from kinova_lfd.core.specs import ActionSpec
 
 
 class GymEnv:
-    """The Gymnasium environment that all Rl environments inherit from."""
+    """The Gymnasium environment that all Rl environments inherit from.
+
+    Conventions at the environment boundary (inputs and outputs of every env):
+    quaternions are ``(x, y, z, w)`` and angular velocities are rad/s.
+    """
 
     @abstractmethod
     def step(self, action: torch.Tensor | np.ndarray, action_spec: ActionSpec):
@@ -52,7 +56,7 @@ class GymEnv:
 
     @property
     def _robot_tool_pose_b(self) -> np.ndarray | torch.Tensor:
-        """Return current tool frame position."""
+        """Return current tool pose, ``[x, y, z, qx, qy, qz, qw]`` (xyzw quaternion)."""
         raise NotImplementedError
 
     @property
@@ -67,7 +71,7 @@ class GymEnv:
 
     @property
     def _tcp_pose_b(self) -> np.ndarray | torch.Tensor:
-        """Return current tool frame position."""
+        """Return current TCP pose, ``[x, y, z, qx, qy, qz, qw]`` (xyzw quaternion)."""
         raise NotImplementedError
 
     @property
@@ -92,12 +96,12 @@ class GymEnv:
 
     @property
     def _robot_body_pose_w(self) -> np.ndarray | torch.Tensor:
-        """Return the body pose information in XYZ + Quaternion."""
+        """Return body poses, ``[x, y, z, qx, qy, qz, qw]`` (xyzw quaternion)."""
         raise NotImplementedError
 
     @property
     def _robot_root_pose_w(self) -> np.ndarray | torch.Tensor:
-        """Return the body pose information in XYZ + Quaternion."""
+        """Return the root pose, ``[x, y, z, qx, qy, qz, qw]`` (xyzw quaternion)."""
         raise NotImplementedError
 
     @property

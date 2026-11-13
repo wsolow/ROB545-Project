@@ -1,3 +1,5 @@
+"""Numpy math utilities. All quaternions are (x, y, z, w), the environment-boundary convention."""
+
 import numpy as np
 
 
@@ -194,7 +196,7 @@ def base_to_tcp_twist(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Transform a twist from base frame to TCP frame.
 
-    Quaternions are [x, y, z, w] following IsaacLab convention.
+    Quaternions are (x, y, z, w).
 
     Args:
         linear_vel: linear velocity in XYZ (m/s)
@@ -222,7 +224,7 @@ def np_euler_xyz_degrees_from_quat(
     The euler angles are assumed in XYZ extrinsic convention.
 
     Args:
-        quat: The quaternion orientation in (w, x, y, z). Shape is (N, 4).
+        quat: The quaternion orientation in (x, y, z, w). Shape is (4,).
         wrap_to_2pi (bool): Whether to wrap output Euler angles into [0, 2π). If
             False, angles are returned in the default range (−π, π]. Defaults to
             False.
@@ -234,7 +236,7 @@ def np_euler_xyz_degrees_from_quat(
         https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
     """
-    q_w, q_x, q_y, q_z = quat[0], quat[1], quat[2], quat[3]
+    q_x, q_y, q_z, q_w = quat[0], quat[1], quat[2], quat[3]
     # roll (x-axis rotation)
     sin_roll = 2.0 * (q_w * q_x + q_y * q_z)
     cos_roll = 1 - 2 * (q_x * q_x + q_y * q_y)

@@ -9,7 +9,6 @@ from kinova_lfd.agents.ibvs.util import rgbd_to_numpy
 from kinova_lfd.agents.moderator import HOME_TCP_CART
 from kinova_lfd.controllers import IBVSController
 from kinova_lfd.controllers.ibvs import GraspPhase
-from kinova_lfd.core.np_math import np_convert_quat
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.teleop.devices import Se3Keyboard
 
@@ -71,10 +70,8 @@ class KortexIbvsTeleopAdapter(IbvsTeleopAdapter):
         pose = self.env._robot_tool_pose_b
         if isinstance(pose, torch.Tensor):
             pose = pose.detach().cpu().numpy()
-        tcp_pose = np.asarray(pose, dtype=np.float64).reshape(-1)[:7]
-        tcp_pose[3:7] = np_convert_quat(
-            tcp_pose[3:7], to="wxyz"
-        )  # Want to change everything else to be in xyzw (mujoco etc).
+        # KortexEnv returns [x, y, z, qx, qy, qz, qw], which is what IBVSController expects.
+        tcp_pose = np.asarray(pose, dtype=np.float64).reshape(-1)[:7].copy()
         twist = np.asarray(self.controller(rgb, depth, tcp_pose=tcp_pose, dt=self.env.step_dt), dtype=np.float64)
 
         if self.controller.phase is GraspPhase.DONE:

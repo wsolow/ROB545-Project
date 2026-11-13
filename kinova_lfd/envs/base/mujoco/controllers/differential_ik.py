@@ -2,7 +2,7 @@ import torch
 from mjlab.envs.mdp.actions import DifferentialIKActionCfg
 from mjlab.utils.lab_api.math import apply_delta_pose
 
-from kinova_lfd.core.tensor_math import quat_apply, quat_from_euler_xyz
+from kinova_lfd.core.mj_tensor_math import quat_apply, quat_from_euler_xyz
 from kinova_lfd.envs.base.gym import GymEnv
 
 

@@ -11,7 +11,7 @@ from mjlab.sim.sim import Simulation
 from mjlab.terrains import TerrainEntityCfg
 
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.core.tensor_math import quat_from_matrix
+from kinova_lfd.core.mj_tensor_math import convert_quat, quat_from_matrix
 from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
 from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.base.mujoco.controllers.differential_ik import MjDifferentialIk
@@ -43,7 +43,8 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
     base_link_name = "base_link"
     gripper_joint_names = ["right_driver_joint"]
     joint_ids = [0, 1, 2, 3, 4, 5, 6, 0]
-    tcp_offset = [0.0, 0.0, 0.120, 1.0, 0.0, 0.0, 0.0]
+    tcp_offset = [0.0, 0.0, 0.120, 0.0, 0.0, 0.0, 1.0]
+    """TCP offset from ``ee_link_name``: ``[x, y, z, qx, qy, qz, qw]`` (xyzw, like ``KortexEnv``)."""
 
     sim = SimulationCfg(njmax=300, nconmax=50, mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
 
@@ -118,7 +119,10 @@ class MjGen3Env(MjDirectRlEnv):
         self.ee_link_idx = self.robot.find_bodies(self.cfg.ee_link_name)[0][0]
         self.tool_site_idx = self.robot.find_sites(self.cfg.tool_site_name)[0][0]
 
-        self.tcp_offset = torch.as_tensor(self.cfg.tcp_offset, device=self.device).unsqueeze(0).repeat(self.num_envs, 1)
+        # cfg.tcp_offset is xyzw (environment boundary); keep the internal copy in wxyz for mj_tensor_math.
+        tcp_offset = torch.as_tensor(self.cfg.tcp_offset, device=self.device, dtype=torch.float32)
+        tcp_offset = torch.cat((tcp_offset[0:3], convert_quat(tcp_offset[3:7], to="wxyz")))
+        self.tcp_offset = tcp_offset.unsqueeze(0).repeat(self.num_envs, 1)
 
         self._diff_ik = MjDifferentialIk(self)
         self._waypoints = WaypointCfg().build()
@@ -175,7 +179,9 @@ class MjGen3Env(MjDirectRlEnv):
     def _pre_physics_step(self, actions: torch.Tensor, action_spec: ActionSpec = None):
         if action_spec == ActionSpec.MOVE_TCP:
             # Obtain waypoints that should be followed by the arm
-            next_action = self._waypoints.get_next_point(self._robot_tool_pose_b, actions[:, :6])
+            # Waypoints run on mjlab's wxyz pose, not the xyzw public property.
+            tool_pose_wxyz = self.robot.data.site_pose_w[:, self.tool_site_idx]
+            next_action = self._waypoints.get_next_point(tool_pose_wxyz, actions[:, :6])
             arm_targets = self._joint_positions[:, self.cfg.joint_ids[:-1]] + self._diff_ik.compute_joint_vel(
                 next_action, smoothing=False
             )
@@ -291,13 +297,15 @@ class MjGen3Env(MjDirectRlEnv):
           - ``rgb``: (H, W, 3) uint8 RGB image
           - ``depth``: (H, W) uint16 depth image
           - ``intrinsic_k``: (3, 3) float64 camera intrinsic matrix
-          - ``camera_pose``: 7D float64 array (x, y, z, qw, qx, qy, qz) in Isaac wxyz
+          - ``camera_pose``: 7D array ``(x, y, z, qx, qy, qz, qw)`` (xyzw)
           - ``timestamp``: float timestamp in seconds
 
         """
         latest = self._rgbd_from_sensor(
             self._tabletop_camera,
-            torch.as_tensor(self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device),
+            self._pose_wxyz_to_xyzw(
+                torch.as_tensor(self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device)
+            ),
         )
         # camera_data = self._tabletop_camera.data
 
@@ -343,7 +351,7 @@ class MjGen3Env(MjDirectRlEnv):
         cam_idx = self._wrist_camera.camera_idx
         pos = torch.as_tensor(self.sim.data.cam_xpos[:, cam_idx], device=self.device, dtype=torch.float32)
         xmat = torch.as_tensor(self.sim.data.cam_xmat[:, cam_idx], device=self.device, dtype=torch.float32)
-        pose = torch.cat((pos, quat_from_matrix(xmat)), dim=-1).squeeze(0)
+        pose = self._pose_wxyz_to_xyzw(torch.cat((pos, quat_from_matrix(xmat)), dim=-1).squeeze(0))
         camera_data = self._wrist_camera.data
         latest = self._rgbd_from_sensor(self._wrist_camera, pose)
 
@@ -381,8 +389,8 @@ class MjGen3Env(MjDirectRlEnv):
 
     @property
     def _robot_tool_pose_b(self) -> torch.Tensor:
-        """Return the tool site of the robot."""
-        return self.robot.data.site_pose_w[:, self.tool_site_idx]
+        """Return the tool site pose, ``[x, y, z, qx, qy, qz, qw]`` (xyzw)."""
+        return self._pose_wxyz_to_xyzw(self.robot.data.site_pose_w[:, self.tool_site_idx])
 
     @property
     def _robot_tool_vel_b(self) -> torch.Tensor:
@@ -405,6 +413,8 @@ class MjGen3Env(MjDirectRlEnv):
 
     @property
     def _object_poses(self) -> torch.Tensor:
-        return torch.stack([c.data.root_link_pose_w for c in self._cubes.values()]).reshape(
+        """Return object poses ``(num_envs, n_objects, 7)`` as ``[x, y, z, qx, qy, qz, qw]`` (xyzw)."""
+        poses = torch.stack([c.data.root_link_pose_w for c in self._cubes.values()]).reshape(
             self.sim.num_envs, self._n_objects, -1
         )
+        return self._pose_wxyz_to_xyzw(poses)

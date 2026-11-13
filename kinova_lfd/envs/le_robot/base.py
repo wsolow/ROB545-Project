@@ -16,7 +16,8 @@ from kinova_lfd.envs.factory import create_env
 
 ARM_JOINT_NAMES = ("joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7")
 GRIPPER_NAME = "gripper"
-EE_POSE_KEYS = ("ee.x", "ee.y", "ee.z", "ee.qw", "ee.qx", "ee.qy", "ee.qz")
+# End-effector pose in the environment-boundary convention: position + (x, y, z, w) quaternion.
+EE_POSE_KEYS = ("ee.x", "ee.y", "ee.z", "ee.qx", "ee.qy", "ee.qz", "ee.qw")
 
 TWIST_TCP_KEYS = ("tcp.vx", "tcp.vy", "tcp.vz", "tcp.wx", "tcp.wy", "tcp.wz", f"{GRIPPER_NAME}.pos")
 MOVE_TCP_KEYS = ("tcp.x", "tcp.y", "tcp.z", "tcp.rx", "tcp.ry", "tcp.rz", f"{GRIPPER_NAME}.pos")

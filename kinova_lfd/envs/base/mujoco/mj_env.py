@@ -22,7 +22,7 @@ from mjlab.viewer.viewer_config import ViewerConfig
 from prettytable import PrettyTable
 
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.core.tensor_math import quat_apply, quat_apply_inverse, quat_inv, quat_mul
+from kinova_lfd.core.mj_tensor_math import convert_quat, quat_apply, quat_apply_inverse, quat_inv, quat_mul
 from kinova_lfd.envs.base.gym import GymEnv
 from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
@@ -440,7 +440,7 @@ class MjDirectRlEnv(GymEnv):
         raise NotImplementedError(f"Please implement the '_get_dones' method for {self.__class__.__name__}.")
 
     """
-    Skillet interface properties
+    GymEnv properties
     """
 
     def _find_link_idx(self, link: str) -> int:
@@ -474,28 +474,28 @@ class MjDirectRlEnv(GymEnv):
             )
         return None
 
+    @staticmethod
+    def _pose_wxyz_to_xyzw(pose: torch.Tensor) -> torch.Tensor:
+        """Reorder the quaternion of ``[..., x, y, z, qw, qx, qy, qz]`` poses to (x, y, z, w).
+
+        mjlab data and the MuJoCo-internal math (``mj_tensor_math``) use (w, x, y, z).
+        Every quaternion leaving the environment is (x, y, z, w), matching ``KortexEnv``.
+        """
+        return torch.cat((pose[..., 0:3], convert_quat(pose[..., 3:7], to="xyzw")), dim=-1)
+
     @property
     def _tcp_pose_b(self) -> torch.Tensor:
-        """Return current tool frame position."""
-        ee_pose_w = self._robot_body_pose_w[:, self._find_link_idx(self.cfg.ee_link_name)]
-        ee_pos_b = quat_apply_inverse(
-            self._robot_root_pose_w[:, 3:7], ee_pose_w[:, 0:3] - self._robot_root_pose_w[:, 0:3]
-        )
-        ee_quat_b = quat_mul(quat_inv(self._robot_root_pose_w[:, 3:7]), ee_pose_w[:, 3:7])
+        """Return the TCP pose in the robot base frame, ``[x, y, z, qx, qy, qz, qw]``."""
+        root_pose_w = self.robot.data.root_link_pose_w  # wxyz (mjlab)
+        ee_pose_w = self.robot.data.body_link_pose_w[:, self._find_link_idx(self.cfg.ee_link_name)]
+        ee_pos_b = quat_apply_inverse(root_pose_w[:, 3:7], ee_pose_w[:, 0:3] - root_pose_w[:, 0:3])
+        ee_quat_b = quat_mul(quat_inv(root_pose_w[:, 3:7]), ee_pose_w[:, 3:7])
 
+        # self.tcp_offset is kept in wxyz internally (see MjGen3Env.__init__).
         tcp_pos_b = ee_pos_b + quat_apply(ee_quat_b, self.tcp_offset[:, 0:3])
         tcp_quat_b = quat_mul(ee_quat_b, self.tcp_offset[:, 3:7])
-        self.robot_tcp_pose_b = torch.concatenate(
-            (tcp_pos_b, tcp_quat_b),
-            dim=1,
-        )
-
-        tcp_pos = ee_pos_b + quat_apply(ee_quat_b, self.tcp_offset[:, 0:3])
-        tcp_quat = quat_mul(ee_quat_b, self.tcp_offset[:, 3:7])
-        return torch.concatenate(
-            (tcp_pos, tcp_quat),
-            dim=1,
-        )
+        self.robot_tcp_pose_b = self._pose_wxyz_to_xyzw(torch.cat((tcp_pos_b, tcp_quat_b), dim=1))
+        return self.robot_tcp_pose_b
 
     @property
     def _ee_vel_b(self) -> torch.Tensor:
@@ -546,13 +546,13 @@ class MjDirectRlEnv(GymEnv):
 
     @property
     def _robot_body_pose_w(self) -> torch.Tensor:
-        """Return the body pose information in XYZ + Quaternion."""
-        return self.robot.data.body_link_pose_w
+        """Return body poses in the world frame, ``[x, y, z, qx, qy, qz, qw]``."""
+        return self._pose_wxyz_to_xyzw(self.robot.data.body_link_pose_w)
 
     @property
     def _robot_root_pose_w(self) -> torch.Tensor:
-        """Return the body pose information in XYZ + Quaternion."""
-        return self.robot.data.root_link_pose_w
+        """Return the root pose in the world frame, ``[x, y, z, qx, qy, qz, qw]``."""
+        return self._pose_wxyz_to_xyzw(self.robot.data.root_link_pose_w)
 
     @property
     def _jacobians(self) -> torch.Tensor:
