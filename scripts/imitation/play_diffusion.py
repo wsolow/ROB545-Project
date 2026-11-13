@@ -1,10 +1,13 @@
 """play_diffusion.py.
 
-Roll out a trained LeRobot Diffusion Policy on ``Mj-Gen3-LiftCube-v0``.
+Roll out a trained LeRobot Diffusion Policy in MuJoCo with the same env timing it was recorded with.
 
-Uses overlapping realtime action chunks: the control loop keeps stepping while
-the next diffusion inference runs asynchronously (default 50 Hz control /
-20 Hz replan / 0.5 overlap).
+The training dataset's metadata sets the playback: ``dt = 1 / fps`` (one env.step per recorded
+frame, e.g. 50 ms for 20 fps ``record_gen3`` data), and the action names pick the action spec and
+sim task (``tcp.*`` twist -> ``Mj-Gen3-v0``; ``joint_*.pos`` -> ``Mj-Gen3-LiftCube-v0``).
+
+Uses overlapping realtime action chunks: the control loop keeps stepping while the next diffusion
+inference runs asynchronously (control at the dataset fps / 20 Hz replan / 0.5 overlap by default).
 
 Example::
 
@@ -24,12 +27,18 @@ from lerobot.policies.utils import build_inference_frame, make_robot_action
 
 from kinova_lfd.data_collection import make_robot, make_robot_config
 from kinova_lfd.data_collection.policy import cube_goal_success
-from kinova_lfd.imitation.play import load_diffusion_policy, load_play_features, policy_image_keys
+from kinova_lfd.imitation.play import (
+    load_dataset_info,
+    load_diffusion_policy,
+    load_play_features,
+    playback_settings,
+    policy_image_keys,
+)
 from kinova_lfd.imitation.realtime import RealtimeDiffusionController, pace_control_loop
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Play a Diffusion Policy on Mj-Gen3-LiftCube-v0.")
+    parser = argparse.ArgumentParser(description="Play a Diffusion Policy in MuJoCo at its recording timing.")
     parser.add_argument(
         "--checkpoint",
         type=str,
@@ -48,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-steps",
         type=int,
         default=290,
-        help="Max control steps per episode (~5.8s at 50 Hz).",
+        help="Max control steps per episode (5.8 s at 50 fps, 14.5 s at 20 fps).",
     )
     parser.add_argument(
         "--success-delta",
@@ -60,9 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--control-hz",
         type=float,
-        default=50.0,
-        help="Wall-clock control rate for env stepping (default 50).",
+        default=None,
+        help="Wall-clock control rate (default: the dataset fps, matching one env.step per dt).",
     )
+
     parser.add_argument(
         "--replan-hz",
         type=float,
@@ -81,29 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=16,
         help="Denoising steps per replan (default 16; checkpoint train default is often 100).",
     )
-    parser.add_argument(
-        "--view-mujoco",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Open the MuJoCo passive viewer (default on).",
-    )
-    parser.add_argument(
-        "--view-wrist",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Show OpenCV wrist camera preview.",
-    )
-    parser.add_argument(
-        "--view-tabletop",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Show OpenCV tabletop camera preview.",
-    )
-    parser.add_argument(
-        "--quiet-realtime",
-        action="store_true",
-        help="Suppress per-replan realtime logs.",
-    )
+
     return parser
 
 
@@ -135,35 +123,54 @@ def main(argv: list[str] | None = None) -> int:
     use_wrist = any(k.endswith(".wrist") for k in image_keys)
     use_tabletop = any(k.endswith(".tabletop") for k in image_keys)
 
+    # Reproduce the recording timing: one env.step per recorded frame (dt = 1 / dataset fps).
+    task_name, action_spec, dt = playback_settings(
+        load_dataset_info(pretrained_dir=pretrained_dir, dataset=args.dataset)
+    )
+    control_hz = args.control_hz if args.control_hz is not None else 1.0 / dt
+    if abs(control_hz * dt - 1.0) > 1e-6:
+        print(
+            f"[play] warning: --control-hz {control_hz:g} differs from the dataset rate {1.0 / dt:g} Hz; "
+            "the sim still advances dt per step, so playback runs faster/slower than real time."
+        )
+
     controller = RealtimeDiffusionController(
         policy,
-        control_hz=args.control_hz,
+        control_hz=control_hz,
         replan_hz=args.replan_hz,
         overlap=args.overlap,
-        verbose=not args.quiet_realtime,
+        verbose=True,
     )
+
+    robot_overrides: dict = {}
+    if task_name == "Mj-Gen3-v0":
+        # Same env settings as record_gen3: episodes are delimited by this script (env.reset per
+        # episode), not by the task time limit.
+        robot_overrides["episode_length_s"] = 1e9
+        robot_overrides["interpolate_joint_targets"] = False
 
     robot_cfg = make_robot_config(
         "mj_gen3",
-        task_name="Mj-Gen3-LiftCube-v0",
+        task_name=task_name,
         device=str(device),
         enable_cameras=True,
         use_wrist_camera=use_wrist,
         use_tabletop_camera=use_tabletop,
-        action_spec="JOINTS_POS",
+        action_spec=action_spec,
+        dt=dt,
+        **robot_overrides,
     )
     robot = make_robot(robot_cfg)
     robot.connect()
 
-    mj_viewer = None
-    if args.view_mujoco and robot.env is not None:
+    if robot.env is not None:
         from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
         mj_viewer = MjViewer(
             robot.env,
             policy=None,
-            view_wrist=args.view_wrist,
-            view_tabletop=args.view_tabletop,
+            view_wrist=True,
+            view_tabletop=True,
             ignore_mjlab_keys=True,
         )
         mj_viewer.open_display()
@@ -174,7 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         f"  checkpoint:      {pretrained_dir}\n"
         f"  cameras:         {[k.removeprefix('observation.images.') for k in image_keys]}\n"
         f"  device:          {device}\n"
-        f"  control/replan:  {args.control_hz:g} Hz / {args.replan_hz:g} Hz "
+        f"  sim:             {task_name}, {action_spec}, dt={dt * 1000:g} ms "
+        f"(decimation {robot.env.cfg.decimation} x {robot.env.physics_dt * 1000:g} ms)\n"
+        f"  control/replan:  {control_hz:g} Hz / {args.replan_hz:g} Hz "
         f"(chunk={controller.chunk_len}, replan_after={controller.replan_after})\n"
         f"  inference_steps: {policy.diffusion.num_inference_steps}\n"
         f"  episodes:        {args.episodes} x {args.max_steps} steps\n"
@@ -211,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
                     success = True
                     break
 
-                pace_control_loop(step_start, args.control_hz)
+                pace_control_loop(step_start, control_hz)
 
             successes += int(success)
             print(

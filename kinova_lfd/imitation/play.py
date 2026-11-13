@@ -94,6 +94,43 @@ def dataset_root_from_train_config(pretrained_dir: Path) -> Path | None:
     return path if (path / "meta" / "info.json").is_file() else None
 
 
+def load_dataset_info(*, pretrained_dir: Path, dataset: str | Path | None = None) -> dict[str, Any]:
+    """Load ``meta/info.json`` of the dataset a checkpoint was trained on.
+
+    Prefers ``dataset`` when given; otherwise uses the ``train_config.json`` root.
+    """
+    if dataset is not None:
+        _, root = resolve_local_dataset(dataset)
+    else:
+        root = dataset_root_from_train_config(pretrained_dir)
+        if root is None:
+            raise FileNotFoundError(
+                "Could not resolve dataset features. Pass --dataset pointing at the "
+                "LeRobot dataset used for training (e.g. _data/gen3_policy_demo_1)."
+            )
+    return json.loads((root / "meta" / "info.json").read_text())
+
+
+def playback_settings(info: dict[str, Any]) -> tuple[str, str, float]:
+    """Return ``(sim task, action_spec, dt)`` that reproduce how a dataset was recorded.
+
+    ``dt`` is ``1 / fps`` of the dataset, so playback steps the env once per recorded frame.
+    The action spec (and the sim task that consumes it) follows the action feature names:
+    ``record_gen3`` teleop data (``tcp.*`` twist) plays on ``Mj-Gen3-v0``; ``record_gen3_policy``
+    data (``joint_*.pos``) plays on ``Mj-Gen3-LiftCube-v0``.
+    """
+    from kinova_lfd.envs.le_robot.base import JOINT_ACTION_KEYS, TWIST_TCP_KEYS
+
+    names = tuple((info.get("features", {}).get("action") or {}).get("names") or ())
+    if names == TWIST_TCP_KEYS:
+        task, action_spec = "Mj-Gen3-v0", "TWIST_TCP"
+    elif names == JOINT_ACTION_KEYS:
+        task, action_spec = "Mj-Gen3-LiftCube-v0", "JOINTS_POS"
+    else:
+        raise ValueError(f"Cannot infer the action spec from dataset action names {list(names)}.")
+    return task, action_spec, 1.0 / float(info["fps"])
+
+
 def load_play_features(
     *,
     pretrained_dir: Path,
@@ -106,17 +143,7 @@ def load_play_features(
     Image keys not present in ``policy.config.input_features`` are dropped so
     tabletop (etc.) is not required at inference when training was wrist-only.
     """
-    if dataset is not None:
-        _, root = resolve_local_dataset(dataset)
-    else:
-        root = dataset_root_from_train_config(pretrained_dir)
-        if root is None:
-            raise FileNotFoundError(
-                "Could not resolve dataset features. Pass --dataset pointing at the "
-                "LeRobot dataset used for training (e.g. _data/gen3_policy_demo_1)."
-            )
-
-    info = json.loads((root / "meta" / "info.json").read_text())
+    info = load_dataset_info(pretrained_dir=pretrained_dir, dataset=dataset)
     features = info.get("features") or {}
     image_keys = policy_image_keys(policy)
     return filter_dataset_features(features, image_keys)

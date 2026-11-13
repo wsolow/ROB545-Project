@@ -10,8 +10,10 @@ from .dataset import (
 from .diffusion_config import make_diffusion_train_config
 from .play import (
     dataset_root_from_train_config,
+    load_dataset_info,
     load_diffusion_policy,
     load_play_features,
+    playback_settings,
     resolve_pretrained_dir,
 )
 from .realtime import RealtimeDiffusionController, compute_chunk_len, pace_control_loop
@@ -24,11 +26,13 @@ __all__ = [
     "filter_cameras_during_train",
     "filter_dataset_features",
     "list_dataset_image_keys",
+    "load_dataset_info",
     "load_diffusion_policy",
     "load_play_features",
     "make_diffusion_train_config",
     "normalize_image_keys",
     "pace_control_loop",
+    "playback_settings",
     "resolve_local_dataset",
     "resolve_pretrained_dir",
     "validate_lerobot_dataset",

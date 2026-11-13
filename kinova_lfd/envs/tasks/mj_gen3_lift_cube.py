@@ -91,6 +91,10 @@ class MjGen3LiftCubeEnv(MjGen3Env):
 
         self.gripper_joint_idx = self.robot.find_joints("right_driver_joint")[0][0]
         self.left_gripper_joint_idx = self.robot.find_joints("left_driver_joint")[0][0]
+        # Device index tensor for the gripper finger joints (see MjGen3Env for why not a Python list).
+        self._gripper_joint_ids = torch.as_tensor(
+            [self.gripper_joint_idx, self.left_gripper_joint_idx], device=self.device, dtype=torch.long
+        )
         self.prev_actions = torch.zeros_like(self.actions)
         self._camera_view_pending = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         self.cube_init_ranges = torch.tensor(cfg.cube_init_ranges, device=self.device)
@@ -173,8 +177,8 @@ class MjGen3LiftCubeEnv(MjGen3Env):
         self.robot_dof_targets = torch.cat((arm_targets, gripper_target), dim=-1)
 
     def _apply_action(self) -> None:
-        self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self.cfg.joint_ids[:-1])
-        self.robot.set_tendon_len_target(self.robot_dof_targets[:, -1:], tendon_ids=[0])
+        self.robot.set_joint_position_target(self.robot_dof_targets[:, :-1], joint_ids=self._arm_joint_ids)
+        self.robot.set_tendon_len_target(self.robot_dof_targets[:, -1:], tendon_ids=self._gripper_tendon_ids)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Terminate when the cube falls or the episode reaches its time limit."""
@@ -196,8 +200,8 @@ class MjGen3LiftCubeEnv(MjGen3Env):
             compute_rewards(
                 self.actions,
                 self.prev_actions,
-                self.robot.data.joint_pos[:, self.cfg.joint_ids[:-1]],
-                self.robot.data.joint_vel[:, self.cfg.joint_ids[:-1]],
+                self.robot.data.joint_pos[:, self._arm_joint_ids],
+                self.robot.data.joint_vel[:, self._arm_joint_ids],
                 self.robot_tcp_pose_w[:, 0:3],
                 self.cube_pose_w[:, 0:3],
                 self.cube_goal_pose_w[:, 0:3],
@@ -229,18 +233,15 @@ class MjGen3LiftCubeEnv(MjGen3Env):
             self.robot_dof_upper_limits[:-1],
         )
         joint_vel = torch.zeros((self.num_envs, self.robot.num_joints), device=self.device)[env_ids]
-        self.robot.set_joint_position_target(
-            joint_pos,
-            env_ids=env_ids.unsqueeze(-1),
-            joint_ids=self.cfg.joint_ids[:-1],
-        )
+        # With tensor joint ids mjlab builds the (env, joint) outer index itself, so env_ids stays 1-D.
+        self.robot.set_joint_position_target(joint_pos, env_ids=env_ids, joint_ids=self._arm_joint_ids)
         self.robot.set_joint_velocity_target(joint_vel, env_ids=env_ids)
-        self.robot.write_joint_position_to_sim(joint_pos, env_ids=env_ids, joint_ids=self.cfg.joint_ids[:-1])
+        self.robot.write_joint_position_to_sim(joint_pos, env_ids=env_ids, joint_ids=self._arm_joint_ids)
         self.robot.write_joint_velocity_to_sim(joint_vel, env_ids=env_ids)
         self.robot.write_joint_position_to_sim(
             torch.zeros((len(env_ids), 2), device=self.device),
             env_ids=env_ids,
-            joint_ids=[self.gripper_joint_idx, self.left_gripper_joint_idx],
+            joint_ids=self._gripper_joint_ids,
         )
         self.prev_actions[env_ids] = 0.0
         self._reset_cube_pose(env_ids)
@@ -258,8 +259,8 @@ class MjGen3LiftCubeEnv(MjGen3Env):
             self._validate_wrist_camera_view(pending_env_ids)
             self._camera_view_pending[pending_env_ids] = False
 
-        arm_joint_pos = self.robot.data.joint_pos[:, self.cfg.joint_ids[:-1]]
-        arm_joint_vel = self.robot.data.joint_vel[:, self.cfg.joint_ids[:-1]]
+        arm_joint_pos = self.robot.data.joint_pos[:, self._arm_joint_ids]
+        arm_joint_vel = self.robot.data.joint_vel[:, self._arm_joint_ids]
         gripper_pos = self.robot.data.joint_pos[:, self.gripper_joint_idx : self.gripper_joint_idx + 1] / 0.8
         gripper_vel = self.robot.data.joint_vel[:, self.gripper_joint_idx : self.gripper_joint_idx + 1]
         obs = torch.nan_to_num(
