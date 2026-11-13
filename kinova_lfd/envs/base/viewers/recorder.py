@@ -9,6 +9,7 @@ Written by Will Solow, 2026.
 
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -384,15 +385,17 @@ class Preview:
                         self._closed = True
                         break
                 except cv2.error as exc:
+                    print(f"[ERROR][{self._tag}] OpenCV error in camera preview; closing the preview: {exc}")
                     break
                 if period > 0:
                     self._stop.wait(period)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[ERROR][{self._tag}] Camera preview thread crashed: {type(exc).__name__}: {exc}")
+            traceback.print_exc()
         finally:
             if self._recorder is not None:
                 self._recorder.stop()
             try:
                 cv2.destroyWindow(self._window)
-            except cv2.error:
-                pass
+            except cv2.error as exc:
+                print(f"[WARN][{self._tag}] Could not destroy preview window: {exc}")

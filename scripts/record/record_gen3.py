@@ -16,6 +16,8 @@ Written by Will Solow, 2026.
 import argparse
 import sys
 
+import cv2  # ruff: ignore[unused-import]. Needed for windows to launch
+
 from kinova_lfd.data_collection import (
     TELEOP_DEVICES,
     Gen3DatasetConfig,

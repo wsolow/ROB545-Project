@@ -4,6 +4,8 @@ import math
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
+
 import torch
 from lerobot.policies.diffusion import DiffusionPolicy
 from lerobot.policies.utils import populate_queues
@@ -19,12 +21,26 @@ def compute_chunk_len(*, control_hz: float, replan_hz: float, n_action_steps: in
     return max(1, min(int(n_action_steps), int(raw)))
 
 
+# Gripper commands at or above this (in robot units, after unnormalizing) round to 1 (closed),
+# below it to 0 (open). Demonstrations record the gripper as exactly 0 or 1.
+GRIPPER_ROUND_THRESHOLD = 0.5
+
+
 class RealtimeDiffusionController:
     """Keep executing actions while the next diffusion chunk runs asynchronously.
 
     Observation queues on ``policy`` are updated every control step (same as
     ``select_action``). Action execution uses an external deque so inference does
     not block the control loop once the first chunk is ready.
+
+    Without ``postprocessor``, :meth:`step` returns normalized policy actions (run the
+    policy postprocessor on them yourself). With ``postprocessor``, each chunk is
+    unnormalized when it is produced and :meth:`step` returns actions in robot units.
+
+    ``round_gripper`` (requires ``postprocessor``) rounds the gripper command, the last
+    action dimension, to 0 or 1 at :data:`GRIPPER_ROUND_THRESHOLD`. The diffusion output
+    is continuous, while the MuJoCo env closes the gripper for any value above 0, so an
+    unrounded "open" command such as 0.02 would close it.
     """
 
     def __init__(
@@ -35,15 +51,21 @@ class RealtimeDiffusionController:
         replan_hz: float = 20.0,
         overlap: float = 0.5,
         verbose: bool = True,
+        postprocessor: Callable[[Tensor], Tensor] | None = None,
+        round_gripper: bool = False,
     ) -> None:
         if not 0.0 < overlap <= 1.0:
             raise ValueError(f"overlap must be in (0, 1], got {overlap}")
+        if round_gripper and postprocessor is None:
+            raise ValueError("round_gripper needs postprocessor: the threshold is in robot units.")
 
         self.policy = policy
         self.control_hz = float(control_hz)
         self.replan_hz = float(replan_hz)
         self.overlap = float(overlap)
         self.verbose = verbose
+        self.postprocessor = postprocessor
+        self.round_gripper = bool(round_gripper)
 
         self.chunk_len = compute_chunk_len(
             control_hz=self.control_hz,
@@ -165,12 +187,28 @@ class RealtimeDiffusionController:
         thread.start()
 
     def _predict_chunk(self, obs_batch: dict[str, Tensor]) -> list[Tensor]:
-        """Run diffusion and return ``chunk_len`` single-step action tensors ``(B, dim)``."""
+        """Run diffusion and return ``chunk_len`` single-step action tensors ``(B, dim)``.
+
+        Actions are unnormalized (and the gripper rounded) here when configured, so the
+        control loop pops ready-to-send actions.
+        """
         with torch.inference_mode():
             actions = self.policy.diffusion.generate_actions(obs_batch)
-        # (B, n_action_steps, dim) -> list of (B, dim)
-        actions = actions[:, : self.chunk_len]
-        return [actions[:, i].contiguous() for i in range(actions.shape[1])]
+            # (B, n_action_steps, dim) -> list of (B, dim)
+            actions = actions[:, : self.chunk_len]
+            chunk = [actions[:, i].contiguous() for i in range(actions.shape[1])]
+            if self.postprocessor is not None:
+                chunk = [self.postprocessor(action) for action in chunk]
+            if self.round_gripper:
+                chunk = [self._round_gripper(action) for action in chunk]
+        return chunk
+
+    @staticmethod
+    def _round_gripper(action: Tensor) -> Tensor:
+        """Round the last action dimension (gripper) to 0 or 1 at ``GRIPPER_ROUND_THRESHOLD``."""
+        action = action.clone()
+        action[..., -1] = (action[..., -1] >= GRIPPER_ROUND_THRESHOLD).to(action.dtype)
+        return action
 
     def _drain_pending(self) -> None:
         with self._lock:

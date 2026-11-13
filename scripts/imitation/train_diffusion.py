@@ -8,6 +8,10 @@ Example::
       --dataset gen3_demo --device cuda \\
       --cameras wrist --resize-h 96 --resize-w 128 --batch-size 4
 
+    # State-only policy (joint positions + gripper + EE pose from observation.state; no images)
+    PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/train_diffusion.py \\
+      --dataset gen3_demo --device cuda --cameras none
+
     PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/train_diffusion.py \\
       --dataset gen3_demo --validate-only
 
@@ -25,8 +29,7 @@ from kinova_lfd.imitation.dataset import (
     resolve_local_dataset,
     validate_lerobot_dataset,
 )
-from kinova_lfd.imitation.diffusion_config import make_diffusion_train_config
-from kinova_lfd.imitation.train_patch import filter_cameras_during_train
+from kinova_lfd.imitation.diffusion_config import filter_cameras_during_train, make_diffusion_train_config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,11 +39,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         required=True,
         help="Dataset name under _data/ (e.g. gen3_demo) or path to a LeRobot root.",
-    )
-    parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help="Load and validate the dataset, then exit without training.",
     )
     parser.add_argument("--device", type=str, default="cuda", help="Torch device for the policy.")
     parser.add_argument("--steps", type=int, default=80000, help="Training steps.")
@@ -56,44 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Checkpoint root (default: outputs/train/diffusion_<name>).",
     )
     parser.add_argument("--job-name", type=str, default=None, help="Run / job name.")
-    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging.")
     parser.add_argument(
         "--cameras",
         nargs="+",
         default=["wrist"],
-        help="Cameras to train on (short names or full keys). Default: wrist. Use 'all' for every cam.",
+        help=(
+            "Cameras to train on (short names or full keys). Default: wrist. Use 'all' for every cam, "
+            "or 'none' for a state-only policy conditioned on observation.state alone."
+        ),
     )
-    parser.add_argument("--resize-h", type=int, default=96, help="Resize height for vision backbone.")
-    parser.add_argument("--resize-w", type=int, default=128, help="Resize width for vision backbone.")
-    parser.add_argument(
-        "--no-resize",
-        action="store_true",
-        help="Keep native image resolution (uses more VRAM).",
-    )
-    parser.add_argument(
-        "--ema",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable EMA weights (uses ~2x model VRAM).",
-    )
-    parser.add_argument(
-        "--shared-rgb-encoder",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Share one ResNet across cameras (default on).",
-    )
-    parser.add_argument(
-        "--return-uint8",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Decode images as uint8 for cheaper DataLoader IPC (default on).",
-    )
-    parser.add_argument(
-        "--gradient-checkpointing",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Checkpoint Unet blocks to save activation memory (default on).",
-    )
+
     return parser
 
 
@@ -106,12 +76,10 @@ def main(argv: list[str] | None = None) -> int:
 
     available = list_dataset_image_keys(root)
     selected = normalize_image_keys(args.cameras, available=available)
-    print(f"  training cameras: {selected}")
+    state_only = not selected
+    print(f"  training cameras: {selected or 'none (state-only)'}")
 
-    if args.validate_only:
-        return 0
-
-    resize_shape = None if args.no_resize else (args.resize_h, args.resize_w)
+    resize_shape = (96, 128)
 
     cfg = make_diffusion_train_config(
         repo_id=repo_id,
@@ -125,20 +93,24 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         num_workers=args.num_workers,
         log_freq=args.log_freq,
-        wandb_enable=args.wandb,
-        image_keys=args.cameras,
+        wandb_enable=False,
+        image_keys=selected,
         resize_shape=resize_shape,
-        ema_enable=args.ema,
-        use_separate_rgb_encoder_per_camera=not args.shared_rgb_encoder,
-        return_uint8=args.return_uint8,
-        gradient_checkpointing=args.gradient_checkpointing,
+        ema_enable=False,
+        use_separate_rgb_encoder_per_camera=False,
+        return_uint8=True,
+        gradient_checkpointing=False,
     )
 
+    if state_only:
+        state_dim = cfg.policy.robot_state_feature.shape[0]
+        inputs = f"  cameras:  none (state-only, observation.state dim {state_dim})\n"
+    else:
+        inputs = f"  cameras:  {selected}\n  resize:   {resize_shape}\n"
     print(
         f"\nStarting diffusion training:\n"
         f"  dataset:  {repo_id} @ {root}\n"
-        f"  cameras:  {selected}\n"
-        f"  resize:   {resize_shape}\n"
+        f"{inputs}"
         f"  output:   {cfg.output_dir}\n"
         f"  steps:    {cfg.steps}  batch: {cfg.batch_size}  device: {cfg.policy.device}\n"
         f"  ema:      {None if cfg.ema is None else cfg.ema.type}  "
@@ -147,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from lerobot.scripts.lerobot_train import train
 
+    # With no cameras selected this strips every image feature, so no video is decoded.
     with filter_cameras_during_train(selected):
         train(cfg)
 

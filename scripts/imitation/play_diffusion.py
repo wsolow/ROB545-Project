@@ -69,14 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--control-hz",
         type=float,
-        default=None,
+        default=20.0,
         help="Wall-clock control rate (default: the dataset fps, matching one env.step per dt).",
     )
 
     parser.add_argument(
         "--replan-hz",
         type=float,
-        default=20.0,
+        default=5.0,
         help="Target diffusion replan rate (default 20). Chunk length = 2*control_hz/replan_hz.",
     )
     parser.add_argument(
@@ -90,6 +90,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=16,
         help="Denoising steps per replan (default 16; checkpoint train default is often 100).",
+    )
+    parser.add_argument(
+        "--round-gripper",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Round the policy's gripper command to 0/1 at 0.5 (demos record exactly 0 or 1). "
+            "Without it, the MuJoCo env closes the gripper for any command above 0."
+        ),
     )
 
     return parser
@@ -140,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         replan_hz=args.replan_hz,
         overlap=args.overlap,
         verbose=True,
+        postprocessor=postprocessor,
+        round_gripper=args.round_gripper,
     )
 
     robot_overrides: dict = {}
@@ -186,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         f"  control/replan:  {control_hz:g} Hz / {args.replan_hz:g} Hz "
         f"(chunk={controller.chunk_len}, replan_after={controller.replan_after})\n"
         f"  inference_steps: {policy.diffusion.num_inference_steps}\n"
+        f"  round_gripper:   {args.round_gripper}\n"
         f"  episodes:        {args.episodes} x {args.max_steps} steps\n"
     )
 
@@ -208,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
                     robot_type=robot.name,
                 )
                 obs_proc = preprocessor(obs_frame)
+                # The controller unnormalizes (and optionally rounds the gripper) per chunk.
                 action = controller.step(obs_proc)
-                action = postprocessor(action)
                 robot_action = make_robot_action(action, ds_features)
                 robot.send_action(robot_action)
 

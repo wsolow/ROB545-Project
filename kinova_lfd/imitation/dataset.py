@@ -23,13 +23,19 @@ def normalize_image_keys(
 ) -> list[str]:
     """Normalize camera names to full feature keys.
 
-    Accepts short names (``wrist``), full keys, or ``["all"]`` to keep every
-    available camera. Raises if a requested camera is missing from ``available``.
+    Accepts short names (``wrist``), full keys, ``["all"]`` to keep every
+    available camera, or ``["none"]`` for no cameras (state-only training).
+    Raises if a requested camera is missing from ``available``.
     """
+    check_available = available is not None
     if available is None:
         available = []
     available_set = set(available)
 
+    if names == ["none"]:
+        return []
+    if names and "none" in names:
+        raise ValueError(f"'none' cannot be combined with other cameras: {names}")
     if not names or names == ["all"]:
         if not available:
             raise ValueError("No cameras available in the dataset.")
@@ -40,8 +46,8 @@ def normalize_image_keys(
         if name == "all":
             return list(available)
         key = name if name.startswith(_IMAGE_PREFIX) else f"{_IMAGE_PREFIX}{name}"
-        if available_set and key not in available_set:
-            short = sorted(k.removeprefix(_IMAGE_PREFIX) for k in available)
+        if check_available and key not in available_set:
+            short = sorted(k.removeprefix(_IMAGE_PREFIX) for k in available) or "none (use --cameras none)"
             raise ValueError(f"Camera {name!r} not in dataset. Available: {short}")
         if key not in resolved:
             resolved.append(key)
@@ -100,6 +106,9 @@ def resolve_local_dataset(name_or_path: str | Path) -> tuple[str, Path]:
 def validate_lerobot_dataset(root: Path | str, *, repo_id: str | None = None) -> dict[str, Any]:
     """Load a local dataset and assert the features needed for diffusion BC.
 
+    ``action`` and ``observation.state`` are required; cameras are optional, so
+    datasets recorded with ``--cameras none`` validate for state-only training.
+
     Returns a summary dict (episodes, frames, fps, feature shapes) for logging.
     """
     root = Path(root)
@@ -119,8 +128,6 @@ def validate_lerobot_dataset(root: Path | str, *, repo_id: str | None = None) ->
     if "observation.state" not in feature_keys:
         missing.append("observation.state")
     image_keys = sorted(k for k in feature_keys if k.startswith("observation.images."))
-    if not image_keys:
-        missing.append("observation.images.* (at least one camera)")
     if missing:
         raise ValueError(f"Dataset at {root} is missing required features: {missing}")
 
@@ -169,6 +176,7 @@ def format_dataset_summary(summary: dict[str, Any]) -> str:
         f"  root: {summary['root']}",
         f"  version: {summary.get('codebase_version')}  robot: {summary.get('robot_type')}",
         f"  episodes: {summary['total_episodes']}  frames: {summary['total_frames']}  fps: {summary['fps']}",
+        f"  cameras: {[k.removeprefix(_IMAGE_PREFIX) for k in summary['image_keys']] or 'none'}",
         "  features:",
     ]
     for key, meta in summary["features"].items():

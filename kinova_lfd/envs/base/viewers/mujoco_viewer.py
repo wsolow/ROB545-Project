@@ -45,7 +45,7 @@ class MjViewer(NativeMujocoViewer):
         plot_cfg: PlotCfg | None = None,
         enable_perturbations: bool = True,
         verbosity: VerbosityLevel = VerbosityLevel.SILENT,
-        view_wrist: bool = False,
+        view_wrist: bool = True,
         view_tabletop: bool = True,
         ignore_mjlab_keys: bool = False,
         preview_fps: float = 20.0,

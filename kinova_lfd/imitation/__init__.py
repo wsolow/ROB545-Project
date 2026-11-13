@@ -7,7 +7,7 @@ from .dataset import (
     resolve_local_dataset,
     validate_lerobot_dataset,
 )
-from .diffusion_config import make_diffusion_train_config
+from .diffusion_config import filter_cameras_during_train, make_diffusion_train_config
 from .play import (
     dataset_root_from_train_config,
     load_dataset_info,
@@ -17,7 +17,6 @@ from .play import (
     resolve_pretrained_dir,
 )
 from .realtime import RealtimeDiffusionController, compute_chunk_len, pace_control_loop
-from .train_patch import filter_cameras_during_train
 
 __all__ = [
     "RealtimeDiffusionController",

@@ -79,8 +79,8 @@ class Gen3RecordConfig:
     # Live viewer: MjViewer for mj_gen3, KortexViewer camera window for kortex_tcp_gen3.
     # Camera previews reuse the frames the robot captured for the dataset.
     view: bool = True
-    view_wrist: bool = False
-    view_tabletop: bool = False
+    view_wrist: bool = True
+    view_tabletop: bool = True
 
 
 @dataclass
