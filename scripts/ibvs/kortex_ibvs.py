@@ -10,7 +10,7 @@ import time
 
 import numpy as np
 
-from kinova_lfd.agents.ibvs import KortexIbvsTeleopAdapter
+from kinova_lfd.agents.ibvs.ibvs_adapter import IbvsTeleopAdapter
 from kinova_lfd.agents.ibvs.util import add_ibvs_args, build_controller, load_setpoint_rgb, rgbd_to_numpy
 from kinova_lfd.controllers import IBVSController
 from kinova_lfd.envs.base.viewers import KortexViewer
@@ -71,7 +71,7 @@ def main() -> None:
     teleop = Se3Keyboard(
         Se3KeyboardCfg(pos_sensitivity=args_cli.pos_sensitivity, rot_sensitivity=args_cli.rot_sensitivity)
     )
-    policy = KortexIbvsTeleopAdapter(
+    policy = IbvsTeleopAdapter(
         env,
         teleop,
         controller_factory=make_controller,

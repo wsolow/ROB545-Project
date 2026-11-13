@@ -135,6 +135,29 @@ class IbvsTeleopAdapter:
             return self._home_action()
         return self._hold_action()
 
+    def _teleop_action(self) -> tuple[np.ndarray, ActionSpec]:
+        action = np.asarray(self.teleop.advance(self.env._robot_tool_pose_b), dtype=np.float64)
+        return action, ActionSpec.TWIST_TCP
+
+    def _ibvs_action(self) -> tuple[np.ndarray, ActionSpec]:
+        assert self.controller is not None
+        rgbd = self.env._get_latest_rgbd_wrist()
+        if rgbd is None:
+            return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.controller.gripper_cmd]), ActionSpec.TWIST_TCP
+
+        rgb, depth, _ = rgbd_to_numpy(rgbd)
+        pose = self.env._robot_tool_pose_b
+        if isinstance(pose, torch.Tensor):
+            pose = pose.detach().cpu().numpy()
+        # KortexEnv returns [x, y, z, qx, qy, qz, qw], which is what IBVSController expects.
+        tcp_pose = np.asarray(pose, dtype=np.float64).reshape(-1)[:7].copy()
+        twist = np.asarray(self.controller(rgb, depth, tcp_pose=tcp_pose, dt=self.env.step_dt), dtype=np.float64)
+
+        if self.controller.phase is GraspPhase.DONE:
+            self._return_to_teleop("Grasp complete")
+
+        return twist, ActionSpec.TWIST_TCP
+
     @property
     def _gripper(self) -> float:
         """Gripper command used outside of IBVS (owned by the keyboard)."""
