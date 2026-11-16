@@ -3,9 +3,11 @@
 Every way an operator can end, discard, reset, or stop an episode funnels into one
 shared ``events`` flag dict through :func:`apply_recording_control`:
 
-- keyboard keys (:func:`init_recording_listener`): ``]`` / Enter, ``[``, R, Esc. These do
+- keyboard keys (:func:`init_recording_listener`): ``]`` / Enter, ``[``, R, H, G, Esc. These do
   not overlap ``Se3Keyboard`` motion keys and stay active with every action source;
-- device buttons (e.g. Xbox X / B / A / Back via ``LeRobotDeviceTeleop.get_recording_controls``);
+- device buttons (e.g. Xbox X / B / A / Y / Start / Back via ``LeRobotDeviceTeleop.get_recording_controls``);
+
+``home`` and ``admittance`` act on the robot; :func:`handle_robot_controls` runs them in the record loop.
 - standard LeRobot ``TeleopEvents`` from any teleop.
 
 The last two are polled each control tick by :func:`poll_source_controls`.
@@ -29,7 +31,8 @@ def apply_recording_control(control: str, events: dict[str, bool]) -> None:
     """Set the ``events`` flags for one recording control.
 
     ``control`` is one of ``"end"`` (``]`` / Enter / Xbox X), ``"rerecord"`` (``[`` / Xbox B),
-    ``"reset"`` (R / Xbox A), or ``"stop"`` (Esc / Xbox Back).
+    ``"reset"`` (R / Xbox A), ``"home"`` (H / Xbox Y), ``"admittance"`` (G / Xbox Start),
+    or ``"stop"`` (Esc / Xbox Back).
     """
     if control == "end":
         print("[record] End: ending episode and saving...")
@@ -47,8 +50,36 @@ def apply_recording_control(control: str, events: dict[str, bool]) -> None:
         print("[record] Reset: resetting environment and discarding episode...")
         events["reset_environment"] = True
         events["exit_early"] = True
+    elif control == "home":
+        print("[record] Home: moving robot home and discarding episode...")
+        events["home"] = True
+    elif control == "admittance":
+        events["toggle_admittance"] = True
     else:
         raise ValueError(f"Unknown recording control {control!r}.")
+
+
+def handle_robot_controls(robot: Any, source: Any, events: dict[str, bool], recording: bool) -> None:
+    """Run pending ``home`` / ``admittance`` controls on robots that support them.
+
+    Homing blocks until the move ends and, while ``recording``, discards the episode like reset.
+    """
+    if events.get("toggle_admittance"):
+        events["toggle_admittance"] = False
+        if hasattr(robot, "set_admittance"):
+            robot.set_admittance(not robot.admittance)
+        else:
+            print(f"[record] Admittance is not supported on {robot.name}.")
+    if events.get("home"):
+        events["home"] = False
+        if not hasattr(robot, "home"):
+            print(f"[record] Home is not supported on {robot.name}.")
+            return
+        robot.home()
+        source.reset()
+        if recording:
+            events["reset_environment"] = True
+            events["exit_early"] = True
 
 
 def init_recording_listener() -> tuple[Any | None, dict[str, bool]]:
@@ -62,6 +93,8 @@ def init_recording_listener() -> tuple[Any | None, dict[str, bool]]:
         "rerecord_episode": False,
         "stop_recording": False,
         "reset_environment": False,
+        "home": False,
+        "toggle_admittance": False,
     }
 
     if not (PYNPUT_AVAILABLE and pynput_can_capture() and pynput_keyboard is not None):
@@ -83,6 +116,10 @@ def init_recording_listener() -> tuple[Any | None, dict[str, bool]]:
             apply_recording_control("rerecord", events)
         elif ch == "r":
             apply_recording_control("reset", events)
+        elif ch == "h":
+            apply_recording_control("home", events)
+        elif ch == "g":
+            apply_recording_control("admittance", events)
 
     listener = pynput_keyboard.Listener(on_press=_on_press)
     listener.start()

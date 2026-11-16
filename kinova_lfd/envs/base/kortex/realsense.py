@@ -139,6 +139,9 @@ class WristCamera:
         self._curr_depth_frame = None
         self._lock = threading.Lock()
         self._rate = 1 / rate
+        self._first_frame = threading.Event()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
 
         self._intrinsic_k, self._intrinsic_wh = self._query_intrinsics(router, username, password)
 
@@ -174,13 +177,19 @@ class WristCamera:
         device_manager = DeviceManagerClient(router)
         vision_config = VisionConfigClient(router)
 
+        handles = device_manager.ReadAllDevices().device_handle
         vision_device_id = None
-        for handle in device_manager.ReadAllDevices().device_handle:
+        for handle in handles:
             if handle.device_type == Common_pb2.VISION:
                 vision_device_id = handle.device_identifier
                 break
         if vision_device_id is None:
-            raise RuntimeError("[Kortex] No vision module found; cannot read wrist-camera intrinsics.")
+            found = ", ".join(Common_pb2.DeviceTypes.Name(h.device_type) for h in handles)
+            raise RuntimeError(
+                "[Kortex] No vision module found; cannot read wrist-camera intrinsics. "
+                f"Devices reported: [{found}]. Check Systems > Devices in the Kinova Web App "
+                "and power-cycle the arm."
+            )
 
         sensor_id = VisionConfig_pb2.SensorIdentifier()
         sensor_id.sensor = VisionConfig_pb2.SENSOR_COLOR
@@ -215,13 +224,30 @@ class WristCamera:
 
     def run(self) -> None:
         """Continuously read frames, keeping only successful reads."""
-        while True:
+        while not self._stop_event.is_set():
             ok, frame = self._rgb_wrist_frame_cap.read()
             if not ok or frame is None:
                 continue
             with self._lock:
                 self._latest_rgb_frame = frame
                 self._latest_timestamp = float(time.time())
+            self._first_frame.set()
+
+    def wait_for_frame(self, timeout: float = 10.0) -> None:
+        """Block until the first frame arrives, raising if none arrives within ``timeout`` seconds."""
+        if not self._first_frame.wait(timeout):
+            raise RuntimeError(
+                f"[Kortex] Wrist RTSP stream rtsp://{self.robot_ip}/color produced no frames in {timeout:.0f}s."
+            )
+
+    def stop(self) -> None:
+        """Stop the reader thread and release the RTSP capture."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            if self._thread.is_alive():
+                return
+        self._rgb_wrist_frame_cap.release()
 
     def _get_latest_rgbd_raw(self) -> dict[str, Any] | None:
         """Return the latest wrist frame in the same layout as the MuJoCo environment.

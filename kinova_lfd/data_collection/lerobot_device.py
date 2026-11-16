@@ -75,12 +75,21 @@ class LeRobotDeviceTeleop(Teleoperator):
     name = "lerobot_device"
 
     # Button -> recording control (see ``controls.apply_recording_control``).
-    recording_buttons: dict[str, str] = {"x": "end", "b": "rerecord", "a": "reset", "back": "stop"}
+    recording_buttons: dict[str, str] = {
+        "x": "end",
+        "b": "rerecord",
+        "a": "reset",
+        "y": "home",
+        "start": "admittance",
+        "back": "stop",
+    }
     # Recording control -> description shown in the device's startup banner.
     control_labels: dict[str, str] = {
         "end": "End episode & save",
         "rerecord": "Discard & re-record episode",
         "reset": "Reset environment (discard episode)",
+        "home": "Go home (discard episode)",
+        "admittance": "Cartesian admittance (toggle)",
         "stop": "Stop recording session",
     }
 

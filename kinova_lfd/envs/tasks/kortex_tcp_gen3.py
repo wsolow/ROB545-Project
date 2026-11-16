@@ -111,7 +111,34 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
             print("[INFO][Kortex] Instancing Wrist Camera...")
             self._rs_wrist_camera = WristCamera(self.cfg.robot_ip, router=self.kortex_tcp_udp[0].router)
             self._rs_wrist_camera.start()
+            self._rs_wrist_camera.wait_for_frame()
             print("[INFO][Kortex] Finished Instancing Wrist Camera")
+
+    def close(self) -> None:
+        """Stop the wrist camera, leave admittance, then stop the arm and Kortex sessions."""
+        if hasattr(self, "_rs_wrist_camera"):
+            self._rs_wrist_camera.stop()
+        if not getattr(self, "_closed", False) and getattr(self, "_adm_mode", None) not in (
+            None,
+            KortexAdmittanceMode.NONE,
+        ):
+            try:
+                self._publish_admittance(None, ActionSpec.TWIST_TCP)
+            except Exception as exc:
+                print(f"[WARN][Kortex] Could not disable admittance on close: {exc}")
+        super().close()
+
+    def move_to_tcp_pose(self, tcp_pose: np.ndarray, timeout: float = 30.0) -> bool:
+        """Blocking reach to ``tcp_pose`` (XYZ RPY + gripper). Leaves admittance. Returns True if reached."""
+        self._curr_motion_goal = None
+        self._publish_action_to_kortex(np.asarray(tcp_pose, dtype=np.float64), action_spec=ActionSpec.MOVE_TCP)
+        reached = self._motion_event.wait(timeout)
+        self.kortex.Unsubscribe(self._motion_handle)
+        if not reached:
+            self.kortex.Stop()
+        self._update_robot_info()
+        self._next_step_time = time.perf_counter()
+        return reached
 
     def _pre_process_action(self, actions: np.ndarray, action_spec: ActionSpec | None = None) -> np.ndarray:
         """Pre process the robot action.

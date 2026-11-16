@@ -3,6 +3,7 @@
 from functools import cached_property
 from typing import Any
 
+import cv2
 import numpy as np
 import torch
 from lerobot.lerobot_types import RobotAction, RobotObservation
@@ -126,15 +127,27 @@ class Gen3LfDRobot(Robot):
             return {}
         return dict.fromkeys(EE_POSE_KEYS, float)
 
-    @property
-    def _cameras_ft(self) -> dict[str, tuple[int, int, int]]:
+    def _camera_hw(self, name: str) -> tuple[int, int]:
         height = int(getattr(self.config, "camera_height", 480))
         width = int(getattr(self.config, "camera_width", 640))
+        return (
+            int(getattr(self.config, f"{name}_camera_height", height)),
+            int(getattr(self.config, f"{name}_camera_width", width)),
+        )
+
+    def _resize_to_feature(self, name: str, rgb: np.ndarray | None) -> np.ndarray | None:
+        height, width = self._camera_hw(name)
+        if rgb is None or rgb.shape[:2] == (height, width):
+            return rgb
+        return cv2.resize(rgb, (width, height), interpolation=cv2.INTER_AREA)
+
+    @property
+    def _cameras_ft(self) -> dict[str, tuple[int, int, int]]:
         features: dict[str, tuple[int, int, int]] = {}
         if getattr(self.config, "use_wrist_camera", False):
-            features["wrist"] = (height, width, 3)
+            features["wrist"] = (*self._camera_hw("wrist"), 3)
         if getattr(self.config, "use_tabletop_camera", False):
-            features["tabletop"] = (height, width, 3)
+            features["tabletop"] = (*self._camera_hw("tabletop"), 3)
         return features
 
     @cached_property
@@ -184,12 +197,12 @@ class Gen3LfDRobot(Robot):
                 obs[key] = float(value)
 
         if getattr(self.config, "use_wrist_camera", False):
-            wrist = rgb_to_hwc_uint8(self.env._get_latest_rgbd_wrist())
+            wrist = self._resize_to_feature("wrist", rgb_to_hwc_uint8(self.env._get_latest_rgbd_wrist()))
             if wrist is not None:
                 obs["wrist"] = wrist
 
         if getattr(self.config, "use_tabletop_camera", False):
-            tabletop = rgb_to_hwc_uint8(self.env._get_latest_rgbd())
+            tabletop = self._resize_to_feature("tabletop", rgb_to_hwc_uint8(self.env._get_latest_rgbd()))
             if tabletop is not None:
                 obs["tabletop"] = tabletop
 

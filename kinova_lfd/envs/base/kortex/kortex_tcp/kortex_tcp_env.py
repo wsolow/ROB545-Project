@@ -62,8 +62,15 @@ class KortexTcpEnv(KortexEnv):
         self.close()
 
     def close(self) -> None:
-        """Cleanup for the environment."""
-        self.kortex.Stop()
+        """Stop the arm and close the Kortex TCP/UDP sessions (idempotent)."""
+        if getattr(self, "_closed", False) or not hasattr(self, "kortex_c"):
+            return
+        self._closed = True
+        try:
+            self.kortex.Stop()
+        finally:
+            for conn in self.kortex_tcp_udp:
+                conn.close()
 
     """
     Helper functions.

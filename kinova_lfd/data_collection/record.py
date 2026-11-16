@@ -20,7 +20,7 @@ from lerobot.utils.feature_utils import build_dataset_frame, combine_feature_dic
 from lerobot.utils.utils import init_logging
 
 from .configs import Gen3RecordConfig
-from .controls import init_recording_listener, poll_source_controls
+from .controls import handle_robot_controls, init_recording_listener, poll_source_controls
 from .factories import make_robot, make_teleop, make_viewer
 
 
@@ -69,6 +69,10 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
     viewer = None
 
     try:
+        # Connect first so a failed connect does not leave an empty dataset on disk.
+        robot.connect()
+        source.connect()
+
         if cfg.dataset.resume:
             dataset = LeRobotDataset.resume(
                 dataset_cfg.repo_id,
@@ -94,9 +98,6 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 streaming_encoding=dataset_cfg.streaming_encoding,
             )
 
-        robot.connect()
-        source.connect()
-
         if cfg.view:
             viewer = make_viewer(robot, view_wrist=cfg.view_wrist, view_tabletop=cfg.view_tabletop)
             if viewer is not None:
@@ -111,6 +112,8 @@ def record(cfg: Gen3RecordConfig) -> LeRobotDataset:
                 "  ] or Enter -> end episode & save\n"
                 "  [          -> discard & re-record\n"
                 "  R          -> reset environment, discard episode\n"
+                "  H          -> move robot home, discard episode (Kortex)\n"
+                "  G          -> toggle Cartesian admittance (Kortex)\n"
                 "  Esc        -> reset environment & stop session\n"
             )
 
@@ -264,6 +267,7 @@ def record_loop(
             if callable(update_observation):
                 update_observation(obs)
             poll_source_controls(source, events)
+            handle_robot_controls(robot, source, events, recording=dataset is not None)
 
             if events.get("exit_early"):
                 events["exit_early"] = False
@@ -274,7 +278,8 @@ def record_loop(
             robot_action_to_send = robot_action_processor((act_processed, obs))
 
         with timer.section("send"):
-            robot.send_action(robot_action_to_send)
+            # Record what the robot reports it executed (e.g. measured twist in admittance).
+            sent_action = robot.send_action(robot_action_to_send)
 
         if viewer is not None:
             with timer.section("viewer"):
@@ -285,7 +290,7 @@ def record_loop(
 
         if dataset is not None:
             with timer.section("record"):
-                action_frame = build_dataset_frame(dataset.features, act_processed, prefix=ACTION)
+                action_frame = build_dataset_frame(dataset.features, sent_action, prefix=ACTION)
                 frame = {**observation_frame, **action_frame, "task": single_task}
                 dataset.add_frame(frame)
 

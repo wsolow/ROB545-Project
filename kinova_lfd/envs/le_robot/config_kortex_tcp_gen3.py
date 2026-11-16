@@ -20,6 +20,9 @@ class KortexTcpGen3RobotConfig(RobotConfig):
     include_ee_pose: bool = True
     camera_height: int = 480
     camera_width: int = 640
+    # Wrist RTSP stream is 1280x720; recorded at half resolution.
+    wrist_camera_height: int = 360
+    wrist_camera_width: int = 640
 
     # Action mode forwarded to Kinova ``ActionSpec``
     action_spec: str = "TWIST_TCP"
