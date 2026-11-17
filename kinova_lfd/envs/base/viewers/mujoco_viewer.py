@@ -52,6 +52,7 @@ class MjViewer(NativeMujocoViewer):
         preview_height: int = 360,
         record_key: str | None = "v",
         video_dir: str | Path = "exp/ibvs_videos",
+        resize_size: tuple[int, int] | None = None,
     ):
         super().__init__(env, policy, frame_rate, key_callback, plot_cfg, enable_perturbations, verbosity)
         if isinstance(self.policy, DeviceBase):
@@ -70,6 +71,7 @@ class MjViewer(NativeMujocoViewer):
             video_dir=video_dir,
             video_prefix="mujoco",
             log_tag="MjViewer",
+            resize_size=resize_size,
         )
         self._viewer_closed = False
 

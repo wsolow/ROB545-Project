@@ -12,3 +12,4 @@ lerobot/
 _outputs/
 _logs/
 outputs/
+*.txt

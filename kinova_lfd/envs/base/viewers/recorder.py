@@ -232,7 +232,9 @@ class Preview:
 
     Each pane is scaled to ``height``, gets the latest status text, and the wrist pane is
     passed through ``annotate_wrist(bgr) -> bgr`` when given. If ``record_key`` is set, a
-    :class:`PreviewRecorder` records the composed window (overlays included).
+    :class:`PreviewRecorder` records the composed window (overlays included). If
+    ``resize_size`` is an ``(H, W)`` tuple, the raw frames resized to that size are also
+    shown side by side in a second window.
 
     Closing the window stops the preview and sets :attr:`closed`; the owning viewer decides
     whether that ends its run.
@@ -251,8 +253,11 @@ class Preview:
         video_dir: str | Path = "exp/ibvs_videos",
         video_prefix: str = "video",
         log_tag: str = "Viewer",
+        resize_size: tuple[int, int] | None = None,
     ) -> None:
         self._window = window_name
+        self._resized_window = f"{window_name} (resized)"
+        self._resize_size = resize_size
         self._view_wrist = view_wrist
         self._view_tabletop = view_tabletop
         self._fps = fps
@@ -350,6 +355,12 @@ class Preview:
             image = annotate(image)
         return resize_to_height(image, self._height)
 
+    def _resized_pane(self, rgbd: RgbdFrame) -> np.ndarray | None:
+        if rgbd is None or rgbd.get("rgb") is None:
+            return None
+        h, w = self._resize_size
+        return cv2.resize(as_preview_bgr(rgbd["rgb"]), (w, h), interpolation=cv2.INTER_AREA)
+
     def _window_closed(self) -> bool:
         try:
             return cv2.getWindowProperty(self._window, cv2.WND_PROP_VISIBLE) < 1
@@ -379,6 +390,14 @@ class Preview:
                             canvas = self._recorder.process(canvas)
                         cv2.imshow(self._window, canvas)
                         shown = True
+                    if self._resize_size is not None:
+                        small = [
+                            self._resized_pane(wrist) if self._view_wrist else None,
+                            self._resized_pane(tabletop) if self._view_tabletop else None,
+                        ]
+                        small = [p for p in small if p is not None]
+                        if small:
+                            cv2.imshow(self._resized_window, compose_side_by_side(small))
                     cv2.waitKey(1)
                     if shown and self._window_closed():
                         print(f"[INFO][{self._tag}] Preview window closed.")
@@ -397,5 +416,7 @@ class Preview:
                 self._recorder.stop()
             try:
                 cv2.destroyWindow(self._window)
+                if self._resize_size is not None:
+                    cv2.destroyWindow(self._resized_window)
             except cv2.error as exc:
                 print(f"[WARN][{self._tag}] Could not destroy preview window: {exc}")

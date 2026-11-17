@@ -1,4 +1,4 @@
-"""train_diffusion.py.
+r"""train_diffusion.py.
 
 Train a LeRobot Diffusion Policy on a local dataset under ``_data/``.
 

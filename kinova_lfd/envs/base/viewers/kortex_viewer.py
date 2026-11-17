@@ -62,6 +62,7 @@ class KortexViewer:
         record_key: str | None = "v",
         video_dir: str | Path = "exp/ibvs_videos",
         pull_frames: bool = True,
+        resize_size: tuple[int, int] | None = None,
     ) -> None:
         """Initialize the viewer.
 
@@ -77,6 +78,8 @@ class KortexViewer:
             video_dir: Directory where recorded videos are saved.
             pull_frames: Fetch frames from the env on the preview thread. Set ``False`` when
                 the caller already reads the cameras and pushes frames via :meth:`sync_display`.
+            resize_size: ``(H, W)`` to also show both raw frames resized to that size in a
+                second window, or ``None`` to disable.
 
         """
         self.env = env
@@ -99,6 +102,7 @@ class KortexViewer:
             video_dir=video_dir,
             video_prefix="kortex",
             log_tag="KortexViewer",
+            resize_size=resize_size,
         )
         self._opened = False
         self._step_count = 0
