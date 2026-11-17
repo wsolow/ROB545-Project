@@ -64,6 +64,11 @@ class RealsenseCamera:
         self._thread: threading.Thread | None = None
         self._closed = False
 
+    @property
+    def depth_scale(self) -> float:
+        """Meters per raw depth unit (0.001 on the D400 series, i.e. depth is in mm)."""
+        return float(self._depth_scale)
+
     def start(self) -> None:
         """Start the background frame reader (no-op if it is already running)."""
         if self._closed:
