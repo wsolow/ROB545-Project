@@ -13,7 +13,9 @@ from kinova_lfd.agents.moderator import HOME_TCP_CART
 from kinova_lfd.controllers import IBVSController
 from kinova_lfd.controllers.ibvs import GraspPhase, extract_block_corners_px
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.teleop.devices import Se3Keyboard
+from kinova_lfd.envs.le_robot.base import to_numpy
+from kinova_lfd.teleop.devices import DeviceBase
+from kinova_lfd.teleop.factory import teleop_device_name
 
 
 class Mode(Enum):
@@ -26,33 +28,63 @@ class Mode(Enum):
     QUIT = auto()
 
 
-KEY_TOGGLE = "G"
-KEY_STOP = "X"
-KEY_HOME = "H"
-KEY_RESUME = "R"
-KEY_SAVE = "B"
-KEY_QUIT = "Z"
+ACTION_TOGGLE = "toggle"
+ACTION_STOP = "stop"
+ACTION_HOME = "home"
+ACTION_RESUME = "resume"
+ACTION_SAVE = "save"
+ACTION_QUIT = "quit"
 
-# Pending keys are resolved in this order when several arrive in one step.
-_KEY_PRIORITY = (KEY_QUIT, KEY_STOP, KEY_HOME, KEY_RESUME, KEY_TOGGLE, KEY_SAVE)
+# Pending actions are resolved in this order when several arrive in one step.
+_ACTION_PRIORITY = (ACTION_QUIT, ACTION_STOP, ACTION_HOME, ACTION_RESUME, ACTION_TOGGLE, ACTION_SAVE)
+
+ACTION_DESCRIPTIONS = {
+    ACTION_TOGGLE: "Start IBVS grasp / interrupt grasp",
+    ACTION_STOP: "Stop robot",
+    ACTION_HOME: "Home robot",
+    ACTION_RESUME: "Resume teleop",
+    ACTION_SAVE: "Save wrist frame as new setpoint",
+    ACTION_QUIT: "Quit",
+}
+
+# Teleop device name (see ``teleop_device_name``) -> action -> key / button.
+BINDINGS: dict[str, dict[str, str]] = {
+    "keyboard": {
+        ACTION_TOGGLE: "G",
+        ACTION_STOP: "X",
+        ACTION_HOME: "H",
+        ACTION_RESUME: "R",
+        ACTION_SAVE: "B",
+        ACTION_QUIT: "Z",
+    },
+    "xbox": {
+        ACTION_TOGGLE: "x",
+        ACTION_STOP: "b",
+        ACTION_HOME: "a",
+        ACTION_RESUME: "start",
+        ACTION_SAVE: "y",
+        ACTION_QUIT: "back",
+    },
+}
 
 
 class IbvsTeleopAdapter:
-    """Viewer policy that switches between keyboard teleop and an IBVS grasp.
+    """Viewer policy that switches between teleop and an IBVS grasp.
 
-    Key presses arrive on the pynput thread and are only latched there. All mode
+    Mode keys / buttons come from :data:`BINDINGS` for the teleop device in use. Presses
+    arrive on the device's input thread and are only latched there. All mode
     changes happen at the start of :meth:`__call__` on the control thread, so the
-    controller and keyboard state are never modified mid-step.
+    controller and teleop device state are never modified mid-step.
 
-    Outside of IBVS the keyboard's gripper value is the gripper command. When IBVS
+    Outside of IBVS the teleop device's gripper value is the gripper command. When IBVS
     hands control back (grasp done or interrupted) the controller's gripper command is
-    copied into the keyboard so the gripper does not snap open and drop the block.
+    copied into the device so the gripper does not snap open and drop the block.
     """
 
     def __init__(
         self,
         env,
-        teleop: Se3Keyboard,
+        teleop: DeviceBase,
         controller_factory: Callable[[np.ndarray, np.ndarray], IBVSController],
         controller: IBVSController | None = None,
         setpoint_dir: str | Path = "exp/ibvs_setpoints",
@@ -62,9 +94,10 @@ class IbvsTeleopAdapter:
 
         Args:
             env: environment.
-            teleop: Keyboard device used for teleoperation.
+            teleop: Teleop device (keyboard, Xbox, ...). Devices without an entry in
+                :data:`BINDINGS` (e.g. VR) can move the arm but have no mode buttons.
             controller_factory: ``(setpoint_rgb, K) -> IBVSController``, used when a new
-                setpoint is captured with B.
+                setpoint is captured (the save button).
             controller: Initial controller, or ``None`` until a setpoint is captured.
             setpoint_dir: Where captured setpoints are written.
             home_tcp: Home pose ``[x, y, z, rx, ry, rz, gripper]`` (the gripper entry is
@@ -82,17 +115,26 @@ class IbvsTeleopAdapter:
         self._pending: set[str] = set()
         self._pending_lock = threading.Lock()
 
-        for key in _KEY_PRIORITY:
-            self.teleop.add_callback(key, self._make_latch(key))
+        device_name = teleop_device_name(teleop)
+        self._bindings = BINDINGS.get(device_name, {})
+        if not self._bindings:
+            print(f"[WARN][IBVS-TELEOP] No IBVS bindings for teleop device {device_name!r}; mode buttons disabled.")
+        for action, button in self._bindings.items():
+            self.teleop.add_callback(button, self._make_latch(action))
+        if self._bindings and hasattr(self.teleop, "button_bindings"):
+            # Show this adapter's meaning of each button in the device's startup banner.
+            self.teleop.button_bindings = {
+                button: ACTION_DESCRIPTIONS[action] for action, button in self._bindings.items()
+            }
 
     def start(self) -> None:
-        """Start the keyboard listener."""
+        """Start the teleop device listener."""
         self.teleop.reset()
         self.teleop.start()
         print(self._help_text())
 
     def stop(self) -> None:
-        """Stop the keyboard listener."""
+        """Stop the teleop device listener."""
         self.teleop.stop()
 
     @property
@@ -108,7 +150,7 @@ class IbvsTeleopAdapter:
             err_txt = f" err={err:.3f}" if err is not None else " (no block)"
             return f"IBVS:{self.controller.phase.name}{err_txt}"
         if self.mode is Mode.TELEOP and self.controller is None:
-            return "TELEOP (no setpoint: press B)"
+            return f"TELEOP (no setpoint: press {self._button(ACTION_SAVE)})"
         return self.mode.name
 
     def annotate_wrist(self, bgr: np.ndarray) -> np.ndarray:
@@ -136,7 +178,8 @@ class IbvsTeleopAdapter:
         return self._hold_action()
 
     def _teleop_action(self) -> tuple[np.ndarray, ActionSpec]:
-        action = np.asarray(self.teleop.advance(self.env._robot_tool_pose_b), dtype=np.float64)
+        # MuJoCo envs return a (1, 7) device tensor; Kortex returns a (7,) numpy array.
+        action = to_numpy(self.teleop.advance(self.env._robot_tool_pose_b)).astype(np.float64).reshape(-1)
         return action, ActionSpec.TWIST_TCP
 
     def _ibvs_action(self) -> tuple[np.ndarray, ActionSpec]:
@@ -160,7 +203,7 @@ class IbvsTeleopAdapter:
 
     @property
     def _gripper(self) -> float:
-        """Gripper command used outside of IBVS (owned by the keyboard)."""
+        """Gripper command used outside of IBVS (owned by the teleop device)."""
         return float(self.teleop._gripper_value)
 
     def _hold_action(self) -> tuple[np.ndarray, ActionSpec]:
@@ -171,30 +214,34 @@ class IbvsTeleopAdapter:
         action[-1] = self._gripper
         return action, ActionSpec.MOVE_TCP
 
-    def _make_latch(self, key: str) -> Callable[[], None]:
+    def _button(self, action: str) -> str:
+        """Key / button bound to ``action`` on the current device (for messages)."""
+        return self._bindings.get(action, "<unbound>")
+
+    def _make_latch(self, action: str) -> Callable[[], None]:
         def _latch() -> None:
             with self._pending_lock:
-                self._pending.add(key)
+                self._pending.add(action)
 
         return _latch
 
     def _resolve_keys(self) -> None:
-        """Consume latched key presses on the control thread."""
+        """Consume latched button presses on the control thread."""
         with self._pending_lock:
             pending, self._pending = self._pending, set()
         if not pending:
             return
         handlers = {
-            KEY_QUIT: self._on_quit,
-            KEY_STOP: self._on_stop,
-            KEY_HOME: self._on_home,
-            KEY_RESUME: self._on_resume,
-            KEY_TOGGLE: self._on_toggle,
-            KEY_SAVE: self._on_save_setpoint,
+            ACTION_QUIT: self._on_quit,
+            ACTION_STOP: self._on_stop,
+            ACTION_HOME: self._on_home,
+            ACTION_RESUME: self._on_resume,
+            ACTION_TOGGLE: self._on_toggle,
+            ACTION_SAVE: self._on_save_setpoint,
         }
-        for key in _KEY_PRIORITY:
-            if key in pending:
-                handlers[key]()
+        for action in _ACTION_PRIORITY:
+            if action in pending:
+                handlers[action]()
 
     def _on_quit(self) -> None:
         if self.mode is Mode.IBVS:
@@ -206,14 +253,14 @@ class IbvsTeleopAdapter:
             return
         if self.mode is Mode.IBVS:
             self._sync_gripper_from_controller()
-        self._set_mode(Mode.STOP, "Stopping the robot (R to Resume)")
+        self._set_mode(Mode.STOP, f"Stopping the robot ({self._button(ACTION_RESUME)} to Resume)")
 
     def _on_home(self) -> None:
         if self.mode not in (Mode.TELEOP, Mode.IBVS, Mode.STOP):
             return
         if self.mode is Mode.IBVS:
             self._sync_gripper_from_controller()
-        self._set_mode(Mode.HOME, "Returning to home position (R to Resume)")
+        self._set_mode(Mode.HOME, f"Returning to home position ({self._button(ACTION_RESUME)} to Resume)")
 
     def _on_resume(self) -> None:
         if self.mode not in (Mode.STOP, Mode.HOME):
@@ -226,7 +273,10 @@ class IbvsTeleopAdapter:
         elif self.mode is Mode.IBVS:
             self._return_to_teleop("IBVS interrupted by operator")
         else:
-            print(f"[INFO][IBVS-TELEOP] Ignoring {KEY_TOGGLE} while {self.mode.name}; press {KEY_RESUME} first.")
+            print(
+                f"[INFO][IBVS-TELEOP] Ignoring {self._button(ACTION_TOGGLE)} while {self.mode.name}; "
+                f"press {self._button(ACTION_RESUME)} first."
+            )
 
     def _on_save_setpoint(self) -> None:
         if self.mode is Mode.IBVS:
@@ -253,7 +303,7 @@ class IbvsTeleopAdapter:
 
     def _start_grasp(self) -> None:
         if self.controller is None:
-            print(f"[WARN][IBVS-TELEOP] No setpoint loaded; press {KEY_SAVE} to capture one first.")
+            print(f"[WARN][IBVS-TELEOP] No setpoint loaded; press {self._button(ACTION_SAVE)} to capture one first.")
             return
         self.controller.reset_phase()
 
@@ -264,7 +314,7 @@ class IbvsTeleopAdapter:
         self._set_mode(Mode.TELEOP, f"{reason}; returning control to teleop")
 
     def _sync_gripper_from_controller(self) -> None:
-        """Make the keyboard's gripper state match what IBVS last commanded."""
+        """Make the teleop device's gripper state match what IBVS last commanded."""
         if self.controller is None:
             return
         closed = float(self.controller.gripper_cmd) >= 0.5
@@ -275,14 +325,8 @@ class IbvsTeleopAdapter:
         print(f"[INFO][IBVS-TELEOP] {message} ({self.mode.name} -> {mode.name})")
         self.mode = mode
 
-    @staticmethod
-    def _help_text() -> str:
-        return (
-            "IBVS teleop keys:\n"
-            f"\t{KEY_TOGGLE}: start IBVS grasp / interrupt grasp\n"
-            f"\t{KEY_STOP}: stop robot\n"
-            f"\t{KEY_HOME}: home robot\n"
-            f"\t{KEY_RESUME}: resume teleop\n"
-            f"\t{KEY_SAVE}: save wrist frame as new setpoint\n"
-            f"\t{KEY_QUIT}: quit"
-        )
+    def _help_text(self) -> str:
+        if not self._bindings:
+            return "IBVS teleop: no mode buttons bound for this device."
+        lines = [f"\t{button}: {ACTION_DESCRIPTIONS[action]}" for action, button in self._bindings.items()]
+        return "IBVS teleop controls:\n" + "\n".join(lines)

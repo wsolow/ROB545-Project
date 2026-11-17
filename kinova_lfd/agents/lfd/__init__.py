@@ -1,0 +1,1 @@
+from .lfd_adapter import DiffusionTeleopAdapter as DiffusionTeleopAdapter

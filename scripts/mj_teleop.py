@@ -15,27 +15,13 @@ import torch
 # from kinova_lfd.envs.base.mujoco.viewer import NativeMujocoViewer
 from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 from kinova_lfd.envs.factory import create_env
-from kinova_lfd.teleop.devices import (
-    Se3Keyboard,
-    Se3KeyboardCfg,
-    VRHeadset,
-    VRHeadsetCfg,
-    VRJoystick,
-    VRJoystickCfg,
-    XboxController,
-    XboxControllerCfg,
-)
+from kinova_lfd.teleop.devices import Se3Keyboard
+from kinova_lfd.teleop.factory import add_teleop_device_arg, make_teleop_device
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Keyboard teleoperation for Kortex environments.")
 parser.add_argument("--task", type=str, default="Mj-Gen3-v0", help="Environment.")
-parser.add_argument(
-    "--teleop_device",
-    type=str,
-    default="keyboard",
-    choices={"keyboard", "vr_joystick", "vr_headset", "xbox"},
-    help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
-)
+add_teleop_device_arg(parser, default="keyboard")
 parser.add_argument("--log_dir", type=str, default="exp/tabletop_admittance/", help="Log location")
 parser.add_argument(
     "--save_dir",
@@ -91,16 +77,7 @@ def main() -> None:
 
     env = create_env(args_cli.task, env_cfg)
 
-    if args_cli.teleop_device.lower() == "keyboard":
-        teleop_interface = Se3Keyboard(Se3KeyboardCfg())
-    elif args_cli.teleop_device.lower() == "vr_joystick":
-        teleop_interface = VRJoystick(VRJoystickCfg())
-    elif args_cli.teleop_device.lower() == "vr_headset":
-        teleop_interface = VRHeadset(VRHeadsetCfg())
-    elif args_cli.teleop_device.lower() == "xbox":
-        teleop_interface = XboxController(XboxControllerCfg())
-    else:
-        raise ValueError(f"Unsupported teleop device: {args_cli.teleop_device}")
+    teleop_interface = make_teleop_device(args_cli.teleop_device)
 
     save_dir = Path(args_cli.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)

@@ -10,27 +10,12 @@ import argparse
 
 from kinova_lfd.agents import DataLogger, LfDModerator
 from kinova_lfd.envs.factory import create_env
-from kinova_lfd.teleop.devices import (
-    Se3Keyboard,
-    Se3KeyboardCfg,
-    VRHeadset,
-    VRHeadsetCfg,
-    VRJoystick,
-    VRJoystickCfg,
-    XboxController,
-    XboxControllerCfg,
-)
+from kinova_lfd.teleop.factory import add_teleop_device_arg, make_teleop_device
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Keyboard teleoperation for Kortex environments.")
 parser.add_argument("--task", type=str, default="Kortex-TCP-Gen3-v0", help="Environment.")
-parser.add_argument(
-    "--teleop_device",
-    type=str,
-    default="xbox",
-    choices={"keyboard", "vr_joystick", "vr_headset", "xbox"},
-    help="Device for interacting with environment. Examples: keyboard, spacemouse, gamepad, handtracking, manusvive",
-)
+add_teleop_device_arg(parser, default="xbox")
 parser.add_argument("--robot_ip", type=str, default="192.168.1.10", help="Robot IP.")
 parser.add_argument("--log_dir", type=str, default="exp/tabletop_admittance/", help="Log location")
 
@@ -47,16 +32,7 @@ def main() -> None:
 
     env = create_env(args_cli.task, env_cfg)
 
-    if args_cli.teleop_device.lower() == "keyboard":
-        teleop_interface = Se3Keyboard(Se3KeyboardCfg())
-    elif args_cli.teleop_device.lower() == "vr_joystick":
-        teleop_interface = VRJoystick(VRJoystickCfg())
-    elif args_cli.teleop_device.lower() == "vr_headset":
-        teleop_interface = VRHeadset(VRHeadsetCfg())
-    elif args_cli.teleop_device.lower() == "xbox":
-        teleop_interface = XboxController(XboxControllerCfg())
-    else:
-        raise ValueError(f"Unsupported teleop device: {args_cli.teleop_device}")
+    teleop_interface = make_teleop_device(args_cli.teleop_device)
     logger = DataLogger(log_dir=args_cli.log_dir)
 
     env.reset()

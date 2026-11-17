@@ -45,22 +45,18 @@ class LeRobotDeviceTeleopConfig(TeleoperatorConfig):
 
 
 def build_device(config: LeRobotDeviceTeleopConfig) -> "DeviceBase":
-    """Construct the repo teleop device named by ``config.device``."""
-    common = {
-        "pos_sensitivity": config.pos_sensitivity,
-        "rot_sensitivity": config.rot_sensitivity,
-        "reference_frame": config.reference_frame,
-        "gripper_term": True,
-    }
-    if config.device == "keyboard":
-        from kinova_lfd.teleop.devices.keyboard import Se3Keyboard, Se3KeyboardCfg
+    """Construct the repo teleop device named by ``config.device`` (limited to ``TELEOP_DEVICES``)."""
+    if config.device not in TELEOP_DEVICES:
+        raise ValueError(f"Unknown teleop device {config.device!r}. Use one of {TELEOP_DEVICES}.")
+    from kinova_lfd.teleop.factory import make_teleop_device
 
-        return Se3Keyboard(Se3KeyboardCfg(**common))
-    if config.device == "xbox":
-        from kinova_lfd.teleop.devices.xbox import XboxController, XboxControllerCfg
-
-        return XboxController(XboxControllerCfg(**common))
-    raise ValueError(f"Unknown teleop device {config.device!r}. Use one of {TELEOP_DEVICES}.")
+    return make_teleop_device(
+        config.device,
+        pos_sensitivity=config.pos_sensitivity,
+        rot_sensitivity=config.rot_sensitivity,
+        reference_frame=config.reference_frame,
+        gripper_term=True,
+    )
 
 
 class LeRobotDeviceTeleop(Teleoperator):

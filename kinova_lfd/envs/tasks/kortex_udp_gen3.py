@@ -70,13 +70,15 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         self._current_prev_actions = np.zeros(shape=(len(self.joint_names),))
 
         if self.cfg.use_tabletop_camera:
-            from kinova_lfd.envs.base.kortex.realsense import RealsenseCamera
+            from kinova_lfd.envs.base.cameras.realsense_camera import RealsenseCamera
 
             print("[INFO][RealSense] Instancing TableTop Camera...")
             self._rs_tabletop_camera = RealsenseCamera()
+            self._rs_tabletop_camera.start()
+            self._rs_tabletop_camera.wait_for_frame()
             print("[INFO][RealSense] Finished Instancing TableTop Camera")
         if self.cfg.use_wrist_camera:
-            from kinova_lfd.envs.base.kortex.realsense import WristCamera
+            from kinova_lfd.envs.base.cameras.kortex_wrist_camera import WristCamera
 
             print("[INFO][Kortex] Instancing Wrist Camera...")
             self._rs_wrist_camera = WristCamera(
@@ -84,6 +86,14 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
             )
             self._rs_wrist_camera.start()
             print("[INFO][Kortex] Finished Instancing Wrist Camera")
+
+    def close(self) -> None:
+        """Stop the cameras, then shut down the UDP bridge."""
+        if hasattr(self, "_rs_wrist_camera"):
+            self._rs_wrist_camera.stop()
+        if hasattr(self, "_rs_tabletop_camera"):
+            self._rs_tabletop_camera.stop()
+        super().close()
 
     def _pre_process_action(self, actions: np.ndarray, action_spec: ActionSpec | None = None) -> np.ndarray:
         """Store the action and return it unchanged."""
@@ -147,15 +157,17 @@ class Gen3KortexUdpEnv(KortexUDPEnv):
         """Return a zero reward. Task rewards are filled in later."""
         return np.array([0.0])
 
-    def _get_latest_rgbd(self) -> dict[str, Any]:
-        """Return the latest tabletop RGB-D frame.
+    def _get_latest_rgbd(self) -> dict[str, Any] | None:
+        """Return the latest tabletop RGB-D frame without blocking.
 
         Returns:
-            RGB in ``(3, H, W)``, depth in meters, intrinsics, and a timestamp.
+            ``None`` before the first frame, otherwise RGB in ``(3, H, W)``, depth in meters
+            ``(1, H, W)``, intrinsics, and a timestamp.
 
         """
         latest = self._rs_tabletop_camera._get_latest_rgbd_raw()
-        latest["rgb"] = latest["rgb"].transpose((2, 0, 1))
+        if latest is None:
+            return None
         depth = np.expand_dims(latest["depth"], axis=0)
         if depth.dtype == np.uint16:
             depth = depth.astype(np.float32) / 1000.0

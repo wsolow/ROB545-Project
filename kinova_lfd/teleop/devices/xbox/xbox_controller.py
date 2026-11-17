@@ -192,6 +192,8 @@ class XboxController(DeviceBase):
         # Monotonic per-button press counters, so consumers polling slower than the
         # event rate never miss a quick tap (see ``press_count``).
         self._press_counts: dict[str, int] = {}
+        # Button name -> callback run on the reader thread at each press (see ``add_callback``).
+        self._additional_callbacks: dict[str, Callable[[], None]] = {}
 
         self._prev_x = False
         self._prev_y = False
@@ -264,6 +266,19 @@ class XboxController(DeviceBase):
     def stop(self) -> None:
         self._device.close()
 
+    def add_callback(self, button: str, func: Callable[[], None]) -> None:
+        """Register ``func`` to run (on the reader thread) when ``button`` is pressed.
+
+        ``button`` is a name such as ``'a'``, ``'x'``, ``'start'`` or ``'back'``. RB is rejected
+        because it toggles the gripper.
+        """
+        button = button.lower()
+        if button not in _BUTTON_MAP.values():
+            raise ValueError(f"Unknown Xbox button {button!r}. Use one of {sorted(set(_BUTTON_MAP.values()))}.")
+        if button == "rb":
+            raise ValueError("Button 'rb' is already bound to the gripper toggle.")
+        self._additional_callbacks[button] = func
+
     def press_count(self, button: str) -> int:
         """Number of times ``button`` (e.g. ``'x'``, ``'back'``) has been pressed since construction."""
         return self._press_counts.get(button, 0)
@@ -283,6 +298,10 @@ class XboxController(DeviceBase):
             self.state.right_stick.pressed = bool(value)
         else:
             setattr(self.state, attr, bool(value))
+        if value == 1:
+            callback = self._additional_callbacks.get(attr)
+            if callback is not None:
+                callback()
 
     def _handle_abs(self, code: int, value: int) -> None:
         mapping = _AXIS_MAP.get(code)

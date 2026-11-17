@@ -1,6 +1,6 @@
 """kortex_ibvs.py.
 
-Keyboard teleoperation of the real Gen3 with an on-demand IBVS grasp.
+Teleoperation (keyboard, Xbox, ...) of the real Gen3 with an on-demand IBVS grasp.
 
 Written by Will Solow, 2026.
 """
@@ -15,9 +15,9 @@ from kinova_lfd.agents.ibvs.util import add_ibvs_args, build_controller, load_se
 from kinova_lfd.controllers import IBVSController
 from kinova_lfd.envs.base.viewers import KortexViewer
 from kinova_lfd.envs.factory import create_env
-from kinova_lfd.teleop.devices import Se3Keyboard, Se3KeyboardCfg
+from kinova_lfd.teleop.factory import add_teleop_device_arg, make_teleop_device
 
-parser = argparse.ArgumentParser(description="Keyboard teleop + IBVS grasping on the real Kortex Gen3.")
+parser = argparse.ArgumentParser(description="Teleop + IBVS grasping on the real Kortex Gen3.")
 
 parser.add_argument("--task", type=str, default="Kortex-TCP-Gen3-v0", choices=["Kortex-TCP-Gen3-v0"])
 parser.add_argument("--robot_ip", type=str, default="192.168.1.10", help="Robot IP.")
@@ -30,9 +30,10 @@ parser.add_argument(
     "--setpoint-dir",
     type=str,
     default="exp/ibvs_setpoints/kortex",
-    help="Directory where B saves wrist-frame setpoints.",
+    help="Directory where the save button (B keyboard / Y Xbox) writes wrist-frame setpoints.",
 )
 add_ibvs_args(parser)
+add_teleop_device_arg(parser, default="keyboard")
 args_cli = parser.parse_args()
 
 
@@ -48,7 +49,7 @@ def _wait_for_wrist_frame(env, timeout: float = 10) -> dict:
 
 
 def main() -> None:
-    """Run keyboard teleop with an on-demand IBVS grasp on the Kortex Gen3."""
+    """Run teleop with an on-demand IBVS grasp on the Kortex Gen3."""
     env_cfg = {
         "robot_ip": args_cli.robot_ip,
         "use_wrist_camera": True,
@@ -66,10 +67,15 @@ def main() -> None:
         _, _, K = rgbd_to_numpy(_wait_for_wrist_frame(env))
         controller = make_controller(load_setpoint_rgb(args_cli.setpoint), K)
     else:
-        print("[INFO][IBVS-TELEOP] No --setpoint given; press B to capture one from the wrist camera.")
+        print(
+            "[INFO][IBVS-TELEOP] No --setpoint given; "
+            "press B (keyboard) / Y (Xbox) to capture one from the wrist camera."
+        )
 
-    teleop = Se3Keyboard(
-        Se3KeyboardCfg(pos_sensitivity=args_cli.pos_sensitivity, rot_sensitivity=args_cli.rot_sensitivity)
+    teleop = make_teleop_device(
+        args_cli.teleop_device,
+        pos_sensitivity=args_cli.pos_sensitivity,
+        rot_sensitivity=args_cli.rot_sensitivity,
     )
     policy = IbvsTeleopAdapter(
         env,

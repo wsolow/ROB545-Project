@@ -25,16 +25,6 @@ class GymEnv:
         raise NotImplementedError
 
     @abstractmethod
-    def _find_link_idx(self, link: str) -> int:
-        """Find the link index of the robot link."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def _find_joint_idx(self, joint: str) -> int:
-        """Find the joint index robot joint."""
-        raise NotImplementedError
-
-    @abstractmethod
     def _get_latest_rgbd() -> np.ndarray | torch.Tensor:
         """Get the latest RGBD information from the camera in the environment."""
         raise NotImplementedError
@@ -42,6 +32,16 @@ class GymEnv:
     @abstractmethod
     def _get_latest_rgbd_wrist() -> np.ndarray | torch.Tensor:
         """Get the latest RGBD information from the wrist camera in the environment."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _find_link_idx(self, link: str) -> int:
+        """Find the link index of the robot link."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _find_joint_idx(self, joint: str) -> int:
+        """Find the joint index robot joint."""
         raise NotImplementedError
 
     @property

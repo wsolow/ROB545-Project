@@ -18,7 +18,8 @@ import numpy as np
 from kortex_api.autogen.messages import Base_pb2
 
 from kinova_lfd.core.specs import ActionSpec
-from kinova_lfd.envs.base.kortex import KortexTcpEnv, KortexTcpEnvCfg, RealsenseCamera, WristCamera
+from kinova_lfd.envs.base.cameras import RealsenseCamera, WristCamera
+from kinova_lfd.envs.base.kortex import KortexTcpEnv, KortexTcpEnvCfg
 
 
 class KortexAdmittanceMode(IntEnum):
@@ -106,6 +107,8 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
         if self.cfg.use_tabletop_camera:
             print("[INFO][RealSense] Instancing TableTop Camera...")
             self._rs_tabletop_camera = RealsenseCamera()
+            self._rs_tabletop_camera.start()
+            self._rs_tabletop_camera.wait_for_frame()
             print("[INFO][RealSense] Finished Instancing TableTop Camera")
         if self.cfg.use_wrist_camera:
             print("[INFO][Kortex] Instancing Wrist Camera...")
@@ -115,9 +118,11 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
             print("[INFO][Kortex] Finished Instancing Wrist Camera")
 
     def close(self) -> None:
-        """Stop the wrist camera, leave admittance, then stop the arm and Kortex sessions."""
+        """Stop the cameras, leave admittance, then stop the arm and Kortex sessions."""
         if hasattr(self, "_rs_wrist_camera"):
             self._rs_wrist_camera.stop()
+        if hasattr(self, "_rs_tabletop_camera"):
+            self._rs_tabletop_camera.stop()
         if not getattr(self, "_closed", False) and getattr(self, "_adm_mode", None) not in (
             None,
             KortexAdmittanceMode.NONE,
@@ -211,21 +216,21 @@ class Gen3KortexTcpEnv(KortexTcpEnv):
         """Compute the rewards."""
         return np.array([0.0])
 
-    def _get_latest_rgbd(self) -> dict[str, Any]:
-        """Grab the latest RGB-D snapshot in the raw Realsense format.
+    def _get_latest_rgbd(self) -> dict[str, Any] | None:
+        """Return the latest tabletop RGB-D snapshot without blocking.
 
         Returns:
-            A dictionary containing:
-              - ``rgb``: (H, W, 3) uint8 RGB image
-              - ``depth``: (H, W) uint16 depth image
+            ``None`` before the first frame, otherwise a dictionary containing:
+              - ``rgb``: (3, H, W) uint8 RGB image
+              - ``depth``: (1, H, W) float32 depth in meters
               - ``intrinsic_k``: (3, 3) float64 camera intrinsic matrix
-              - (0.8, 0.1, 0.1, 1.0)
+              - ``camera_pose``: ``None``
               - ``timestamp``: float timestamp in seconds
 
         """
         latest = self._rs_tabletop_camera._get_latest_rgbd_raw()
-        # RGB is (H, W, 3) -> (3, H, W)
-        latest["rgb"] = latest["rgb"].transpose((2, 0, 1))
+        if latest is None:
+            return None
         depth = np.expand_dims(latest["depth"], axis=0)
         if depth.dtype == np.uint16:
             depth = depth.astype(np.float32) / 1000.0
