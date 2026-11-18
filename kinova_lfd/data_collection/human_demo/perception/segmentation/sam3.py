@@ -23,7 +23,6 @@ import numpy as np
 from kinova_lfd.data_collection.human_demo.perception.episode_io import RawEpisode
 from kinova_lfd.data_collection.human_demo.perception.segmentation.base import Segmenter, SegmenterCfg
 from kinova_lfd.data_collection.human_demo.perception.server_utils import (
-    DEFAULT_TIMEOUT_S,
     ServerClient,
     create_model_app,
     run_locked,
@@ -41,8 +40,8 @@ class Sam3Cfg(SegmenterCfg):
 
     name: str = "sam3"
     server_url: str = f"http://127.0.0.1:{DEFAULT_PORT}"
-    timeout_s: float = DEFAULT_TIMEOUT_S
-    output_prob_thresh: float = 0.5
+    timeout_s: float = 3600.0
+    output_prob_thresh: float = 0.7
     """Minimum SAM3 score for an instance to be reported on a frame."""
     prompt_frame_index: int = 0
     """Frame the text prompt is added on; propagation runs forward and backward from it."""

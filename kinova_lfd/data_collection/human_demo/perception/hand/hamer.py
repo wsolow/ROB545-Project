@@ -54,7 +54,6 @@ from kinova_lfd.data_collection.human_demo.perception.hand.base import (
     make_hand_detector,
 )
 from kinova_lfd.data_collection.human_demo.perception.server_utils import (
-    DEFAULT_TIMEOUT_S,
     ServerClient,
     create_model_app,
     run_locked,
@@ -86,7 +85,7 @@ class HamerCfg(HandEstimatorCfg):
 
     name: str = "hamer"
     server_url: str = f"http://127.0.0.1:{DEFAULT_PORT}"
-    timeout_s: float = DEFAULT_TIMEOUT_S
+    timeout_s: float = 3600.0
     det_score_thresh: float = 0.5
     """Minimum detector score for a hand box to be used."""
     rescale_factor: float = 2.0

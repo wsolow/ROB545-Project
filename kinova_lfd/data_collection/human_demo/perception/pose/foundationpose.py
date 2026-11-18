@@ -31,7 +31,6 @@ from kinova_lfd.data_collection.human_demo.perception.pose.base import (
     estimate_object_track,
 )
 from kinova_lfd.data_collection.human_demo.perception.server_utils import (
-    DEFAULT_TIMEOUT_S,
     ServerClient,
     create_model_app,
     run_locked,
@@ -58,7 +57,7 @@ class FoundationPoseCfg(PoseEstimatorCfg):
 
     name: str = "foundationpose"
     server_url: str = f"http://127.0.0.1:{DEFAULT_PORT}"
-    timeout_s: float = DEFAULT_TIMEOUT_S
+    timeout_s: float = 3600.0
     est_refine_iter: int = 5
     """Refiner iterations when registering."""
     track_refine_iter: int = 2

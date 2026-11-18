@@ -15,9 +15,6 @@ from typing import Any
 
 import httpx
 
-DEFAULT_TIMEOUT_S = 3600.0
-"""Client timeout: one request processes a whole episode, which can take minutes."""
-
 
 def create_model_app(title: str, info: Callable[[], dict[str, Any]]) -> tuple[Any, threading.Lock]:
     """Create a FastAPI app with ``GET /health`` and a lock that serializes GPU requests.
@@ -62,7 +59,7 @@ def serve(app: Any, host: str, port: int) -> None:
 class ServerClient:
     """Minimal JSON client for a perception server."""
 
-    def __init__(self, url: str, timeout_s: float = DEFAULT_TIMEOUT_S, name: str = "server") -> None:
+    def __init__(self, url: str, timeout_s: float = 3600.0, name: str = "server") -> None:
         self.url = url.rstrip("/")
         self.timeout_s = timeout_s
         self.name = name

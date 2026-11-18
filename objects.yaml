@@ -1,0 +1,13 @@
+# Objects tracked by scripts/perception/track_object_pose.py.
+#
+# Each entry:
+#   name:        identifier used in the output files
+#   prompt:      SAM3 text prompt (one concept per object)
+#   box_size_m:  box edge lengths in meters (a mesh centered at the origin is generated), OR
+#   mesh_path:   path to a mesh in meters (.obj / .ply / .stl)
+#   symmetry:    none | box | cube   (default: cube/box for box objects, none for meshes)
+#   color_rgb:   optional vertex color for generated box meshes
+objects:
+  - name: pink_cube
+    prompt: pink cube
+    box_size_m: [0.041, 0.041, 0.041]

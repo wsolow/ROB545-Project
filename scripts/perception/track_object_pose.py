@@ -24,14 +24,13 @@ Written by Will Solow, 2026.
 import argparse
 import sys
 
-from kinova_lfd.data_collection.human_demo.perception.pipeline import (
-    DEFAULT_OBJECTS_YAML,
+from kinova_lfd.data_collection.human_demo.perception import (
     STAGES,
     ObjectTrackingCfg,
     ObjectTrackingPipeline,
 )
-from kinova_lfd.data_collection.human_demo.perception.pose.foundationpose import FoundationPoseCfg
-from kinova_lfd.data_collection.human_demo.perception.segmentation.sam3 import Sam3Cfg
+from kinova_lfd.data_collection.human_demo.perception.pose import FoundationPoseCfg
+from kinova_lfd.data_collection.human_demo.perception.segmentation import Sam3Cfg
 from kinova_lfd.data_collection.human_demo.perception.types import load_object_specs
 
 
@@ -39,14 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Track object 6D poses in human demonstration datasets.")
     parser.add_argument("--dataset", type=str, nargs="+", required=True, help="Dataset root(s), e.g. _data/human_demo.")
     parser.add_argument("--episodes", type=int, nargs="*", default=None, help="Episode indices (default: all).")
-    parser.add_argument("--objects", type=str, default=str(DEFAULT_OBJECTS_YAML), help="Objects YAML file.")
+    parser.add_argument("--objects", type=str, default="objects.yaml", help="Objects YAML file.")
     parser.add_argument("--stages", type=str, nargs="+", default=list(STAGES), choices=STAGES, help="Stages to run.")
-    parser.add_argument("--sam3-url", type=str, default=Sam3Cfg.server_url, help="SAM3 server URL.")
-    parser.add_argument(
-        "--foundationpose-url", type=str, default=FoundationPoseCfg.server_url, help="FoundationPose server URL."
-    )
-    parser.add_argument("--prob-thresh", type=float, default=Sam3Cfg.output_prob_thresh, help="SAM3 score threshold.")
-    parser.add_argument("--overwrite", action="store_true", help="Recompute outputs that already exist.")
+
     parser.add_argument("--overlay", action="store_true", help="Write an _overlay.mp4 check video per episode.")
     return parser
 
@@ -55,10 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = ObjectTrackingCfg(
         objects=load_object_specs(args.objects),
-        segmenter=Sam3Cfg(server_url=args.sam3_url, output_prob_thresh=args.prob_thresh),
-        pose=FoundationPoseCfg(server_url=args.foundationpose_url),
+        segmenter=Sam3Cfg(),
+        pose=FoundationPoseCfg(),
         stages=tuple(args.stages),
-        overwrite=args.overwrite,
         save_overlay=args.overlay,
     )
     ObjectTrackingPipeline(cfg).run(args.dataset, args.episodes)

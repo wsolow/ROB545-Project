@@ -39,8 +39,8 @@ from kinova_lfd.data_collection.human_demo.perception.pose import (
 from kinova_lfd.data_collection.human_demo.perception.segmentation import Sam3Cfg, SegmenterCfg, make_segmenter
 from kinova_lfd.data_collection.human_demo.perception.types import ObjectSpec, PoseResult, SegmentationResult
 
-DEFAULT_OBJECTS_YAML = Path(__file__).resolve().parent / "objects.yaml"
 _COLORS = [(255, 64, 160), (64, 200, 255), (255, 200, 0), (120, 255, 80), (200, 120, 255)]
+STAGES = ("segmentation", "pose")
 
 
 @dataclass
@@ -50,10 +50,8 @@ class ObjectTrackingCfg:
     objects: list[ObjectSpec] = field(default_factory=list)
     segmenter: SegmenterCfg = field(default_factory=Sam3Cfg)
     pose: PoseEstimatorCfg = field(default_factory=FoundationPoseCfg)
-    stages: tuple[str, ...] = ("segmentation", "pose")
+    stages: tuple[str, ...] = STAGES
     """Stages to run."""
-    overwrite: bool = False
-    """Recompute outputs that already exist (otherwise they are skipped)."""
     save_overlay: bool = False
     """Write an ``_overlay.mp4`` check video per episode."""
 
@@ -100,21 +98,13 @@ class ObjectTrackingPipeline:
         summary: dict[str, Any] = {}
 
         if self.segmenter is not None:
-            if seg_file.exists() and not self.cfg.overwrite:
-                summary["segmentation"] = "exists (skipped)"
-            else:
-                summary["segmentation"] = self.segmenter.segment_episode(ep_dir, self.cfg.objects, seg_file)
+            summary["segmentation"] = self.segmenter.segment_episode(ep_dir, self.cfg.objects, seg_file)
             print(f"  segmentation: {summary['segmentation']}")
 
         if self.pose_estimator is not None:
             if not seg_file.exists():
                 raise FileNotFoundError(f"{seg_file} missing; run the segmentation stage first.")
-            if pose_file.exists() and not self.cfg.overwrite:
-                summary["pose"] = "exists (skipped)"
-            else:
-                summary["pose"] = self.pose_estimator.estimate_episode(
-                    ep_dir, seg_file, self.cfg.objects, pose_file, fps
-                )
+            summary["pose"] = self.pose_estimator.estimate_episode(ep_dir, seg_file, self.cfg.objects, pose_file, fps)
             print(f"  pose: {summary['pose']}")
 
         if self.cfg.save_overlay and seg_file.exists():
