@@ -51,7 +51,48 @@ dev = [
     "pytest",
 ]
 
+# Human-demo object perception (SAM3 segmentation + FoundationPose 6D pose servers).
+# SAM3, nvdiffrast and pytorch3d are installed from source separately; see the README.
+perception = [
+    # servers / clients
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "pyyaml",
+    "trimesh",
+    "huggingface_hub",
+    # SAM3 runtime (sam3 itself is installed with --no-deps so numpy stays >= 2)
+    "timm>=1.0.17",
+    "ftfy",
+    "iopath",
+    "pycocotools",
+    # FoundationPose runtime (pyrender / PyOpenGL pins intentionally left out)
+    "scipy",
+    "scikit-learn",
+    "scikit-image",
+    "h5py",
+    "joblib",
+    "ruamel.yaml>=0.18",
+    "imageio",
+    "open3d",
+    "transformations",
+    "matplotlib",
+    "pandas",
+    "Pillow",
+    "kornia>=0.7",
+    "omegaconf>=2.3",
+    "psutil",
+    "tqdm",
+    "warp-lang",
+    # build FoundationPose's mycpp extension against a numpy-2-compatible pybind11
+    "pybind11>=2.12",
+    # FoundationPose weights (Google Drive)
+    "gdown",
+]
+
 [project.scripts]
+sam3_server = "kinova_lfd.data_collection.human_demo.perception.segmentation.sam3:main"
+foundationpose_server = "kinova_lfd.data_collection.human_demo.perception.pose.foundationpose:main"
 
 
 #[project.entry-points."gymnasium.envs"]

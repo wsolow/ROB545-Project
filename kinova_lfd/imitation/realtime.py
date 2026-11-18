@@ -50,7 +50,6 @@ class RealtimeDiffusionController:
         control_hz: float = 50.0,
         replan_hz: float = 20.0,
         overlap: float = 0.5,
-        verbose: bool = True,
         postprocessor: Callable[[Tensor], Tensor] | None = None,
         round_gripper: bool = False,
     ) -> None:
@@ -63,7 +62,6 @@ class RealtimeDiffusionController:
         self.control_hz = float(control_hz)
         self.replan_hz = float(replan_hz)
         self.overlap = float(overlap)
-        self.verbose = verbose
         self.postprocessor = postprocessor
         self.round_gripper = bool(round_gripper)
 
@@ -144,42 +142,24 @@ class RealtimeDiffusionController:
             self._actions.extend(chunk)
             self._executed_since_plan = 0
             self._replan_count += 1
-        if self.verbose:
-            print(
-                f"[realtime] warmup chunk ready: len={len(chunk)} "
-                f"replan_after={self.replan_after} chunk_len={self.chunk_len}"
-            )
 
     def _maybe_start_inference(self) -> None:
         with self._lock:
             if self._infer_thread is not None and self._infer_thread.is_alive():
                 return
             generation = self._infer_generation
-            queue_len = len(self._actions)
-            executed = self._executed_since_plan
         obs = self._snapshot_obs_batch()
-        if self.verbose:
-            print(
-                f"[realtime] replan start #{self._replan_count + 1}: "
-                f"executed_since_plan={executed}/{self.replan_after} "
-                f"queue_len={queue_len}"
-            )
 
         def worker() -> None:
             t0 = time.perf_counter()
-            try:
+            try:  # ruff: ignore[suppressible-exception]
                 chunk = self._predict_chunk(obs)
-            except Exception as exc:  # noqa: BLE001 — surface on main via pending miss
-                if self.verbose:
-                    print(f"[realtime] inference failed: {exc}")
-                return
-            dt = time.perf_counter() - t0
+            except Exception as exc:  # noqa: BLE001
+                pass
             with self._lock:
                 if generation != self._infer_generation:
                     return
                 self._pending = (generation, chunk)
-            if self.verbose:
-                print(f"[realtime] replan done in {dt:.3f}s (chunk_len={len(chunk)})")
 
         thread = threading.Thread(target=worker, name="diffusion-replan", daemon=True)
         with self._lock:
@@ -238,13 +218,6 @@ class RealtimeDiffusionController:
                 action = self._actions.popleft()
                 self._last_action = action
                 return action
-            last = self._last_action
-            busy = self._infer_thread is not None and self._infer_thread.is_alive()
-
-        if last is not None:
-            if self.verbose and busy:
-                print("[realtime] action queue empty; holding last action while inference runs")
-            return last
 
         # Should only happen if warmup failed; block for a chunk.
         self._run_inference_blocking()

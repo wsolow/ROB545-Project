@@ -13,3 +13,6 @@ _outputs/
 _logs/
 outputs/
 *.txt
+# Third-party model source (see README) and local model/mesh caches
+third_party/
+**/.cache/

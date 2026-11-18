@@ -188,7 +188,6 @@ def build_realtime_controller(
         control_hz=control_hz,
         replan_hz=args.replan_hz,
         overlap=args.overlap,
-        verbose=True,
         postprocessor=bundle.postprocessor,
         round_gripper=args.round_gripper,
     )
