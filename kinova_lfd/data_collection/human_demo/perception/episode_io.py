@@ -7,8 +7,8 @@ Layout written by ``record_human_demo.py``::
     <dataset_root>/raw/episode_000000/depth/00000.png   # uint16 millimeters, aligned to color
     <dataset_root>/raw/episode_000000/cam_K.txt         # 3x3 intrinsics
 
-Perception outputs live next to ``raw/``: ``<dataset_root>/segmentation/``, ``<dataset_root>/6d_pose/`` and
-``<dataset_root>/hand_pose/``.
+Perception outputs live next to ``raw/``: ``<dataset_root>/segmentation/``, ``<dataset_root>/6d_pose/``,
+``<dataset_root>/hand_pose/``, and check videos in ``<dataset_root>/overlay/``.
 
 Written by Will Solow, 2026.
 """
@@ -24,6 +24,7 @@ import numpy as np
 SEGMENTATION_DIR = "segmentation"
 POSE_DIR = "6d_pose"
 HAND_DIR = "hand_pose"
+OVERLAY_DIR = "overlay"
 _EPISODE_RE = re.compile(r"^episode_(\d+)$")
 
 
@@ -45,6 +46,11 @@ def pose_path(dataset_root: str | Path, episode_index: int) -> Path:
 
 def hand_path(dataset_root: str | Path, episode_index: int) -> Path:
     return Path(dataset_root) / HAND_DIR / f"{episode_name(episode_index)}.npz"
+
+
+def overlay_path(dataset_root: str | Path, episode_index: int, kind: str) -> Path:
+    """Check video ``<root>/overlay/episode_XXXXXX_<kind>.mp4`` (``kind``: objects, hands, combined)."""
+    return Path(dataset_root) / OVERLAY_DIR / f"{episode_name(episode_index)}_{kind}.mp4"
 
 
 def list_episodes(dataset_root: str | Path) -> list[int]:

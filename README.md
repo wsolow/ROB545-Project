@@ -88,6 +88,26 @@ cd ../../../..
    `TORCH_CUDA_ARCH_LIST="12.0"` targets the RTX 5070; change it for other GPUs. mycpp needs
    `libboost-dev` and `libeigen3-dev` (already listed under the Kortex C++ requirements below).
 
+6. HaMeR (hand pose). Installed with `--no-deps`, like pyrender: their pins (`mmcv==1.3.9`,
+   detectron2, chumpy, `PyOpenGL==3.1.0`) do not build or break the env. The `perception` extra covers
+   the runtime. Weights go in `kinova_lfd/.cache/models/hamer` (the contents of HaMeR's `_DATA`):
+```bash
+git clone --recursive https://github.com/geopavlakos/hamer third_party/hamer
+pip install --no-deps -e third_party/hamer && pip install --no-deps pyrender
+mkdir -p kinova_lfd/.cache/models/hamer && cd kinova_lfd/.cache/models/hamer
+wget https://www.cs.utexas.edu/~pavlakos/hamer/data/hamer_demo_data.tar.gz
+tar --warning=no-unknown-keyword --exclude=".*" -xf hamer_demo_data.tar.gz && mv _DATA/* . && rmdir _DATA
+rm hamer_demo_data.tar.gz
+wget https://huggingface.co/spaces/rolpotamias/WiLoR/resolve/main/pretrained_models/detector.pt -O yolov8_hand_detector.pt
+cd -
+```
+   Download `MANO_RIGHT.pkl` from [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de) (registration
+   required) into `kinova_lfd/.cache/models/hamer/data/mano/`. The server rewrites it without
+   chumpy on first start (the original is kept as `MANO_RIGHT_chumpy.pkl`). HaMeR's original hand
+   detector (`hamer_server --detector vitpose`, ViTDet + ViTPose) also needs detectron2 and
+   `pip install -e third_party/hamer/third-party/ViTPose` (`mmcv==1.3.9`, untested on this env).
+   The default `--detector yolov8` needs neither.
+
 5. FoundationPose weights (refiner `2023-10-28-18-33-37`, scorer `2024-01-11-20-02-45`). The server
    links `third_party/FoundationPose/weights` to this folder on startup:
 ```bash
@@ -96,22 +116,30 @@ gdown --folder https://drive.google.com/drive/folders/1DFezOAD0oD1BblsXVxqDsl8fj
 ```
 
 ## Running
-Start both servers (each in its own terminal; leave them running between runs):
+Start the servers for the stages you run (each in its own terminal; leave them running between runs):
 ```bash
 sam3_server            # http://127.0.0.1:8001, add --offload-video-to-cpu for long episodes
 foundationpose_server  # http://127.0.0.1:8002
+hamer_server           # http://127.0.0.1:8003, --detector yolov8 (default) or vitpose
 ```
-Then track the objects listed in `kinova_lfd/data_collection/human_demo/perception/objects.yaml`
-(name, SAM3 text prompt, box size or mesh, symmetry) through one or more datasets:
+Then run any subset of the stages `segmentation`, `pose` and `hand` (default: all three) through one or
+more datasets. The object stages track the objects listed in `objects.yaml` (name, SAM3 text prompt,
+box size or mesh, symmetry):
 ```bash
-PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/perception/track_object_pose.py \
-    --dataset _data/human_demo --episodes 0 1 --overlay
+PYTHONPATH=lerobot/src:$PYTHONPATH python scripts/perception/track_human_demo.py \
+    --dataset _data/human_demo --episodes 0 1                 # all stages, with check videos
+python scripts/perception/track_human_demo.py --dataset _data/human_demo --stages hand --no-overlay
 ```
 Outputs, next to each dataset's `raw/`:
 - `segmentation/episode_XXXXXX.npz`: per-object masks (packed bits), boxes, SAM3 scores.
 - `6d_pose/episode_XXXXXX.npz`: `T_C_O` (object pose in the camera frame), `valid` (frame has a SAM3
   mask), `registered` (pose from a re-registration), `scores`, `frame_index`, `timestamps`, `intrinsic_k`.
-- `6d_pose/meta.json`: objects and configs used; `--overlay` also writes `episode_XXXXXX_overlay.mp4`.
+- `6d_pose/meta.json`: objects and configs used.
+- `hand_pose/episode_XXXXXX.npz`: per hand (`left`, `right`): `detected`, boxes and scores, MANO
+  parameters, `cam_t`, 21 keypoints in the camera frame (`keypoints_3d`) and in pixels (`keypoints_2d`).
+  `hand_pose/meta.json` holds the hand config.
+- `overlay/` (on by default, `--no-overlay` to skip): `episode_XXXXXX_objects.mp4`, `episode_XXXXXX_hands.mp4`, and
+  `episode_XXXXXX_combined.mp4` when both object and hand stages ran.
 
 Notes:
 - One SAM3 instance is kept per text prompt (highest average score over the episode).
@@ -120,6 +148,8 @@ Notes:
   objects (`symmetry: cube` / `box`) do not flip orientation.
 - SAM3 keeps decoded frames on the GPU (about 6 MB per frame), so episodes of more than about
   a minute need `sam3_server --offload-video-to-cpu` on a 12 GB GPU.
+- HaMeR keeps the most confident detection of each hand per frame. Its MANO parameters always
+  describe a right hand (mirrored for the left hand); use `keypoints_3d`, which already undo that.
 
 # Kortex UDP bridge with C++ bindings
 

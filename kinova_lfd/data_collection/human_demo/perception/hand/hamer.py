@@ -86,7 +86,7 @@ class HamerCfg(HandEstimatorCfg):
     name: str = "hamer"
     server_url: str = f"http://127.0.0.1:{DEFAULT_PORT}"
     timeout_s: float = 3600.0
-    det_score_thresh: float = 0.5
+    det_score_thresh: float = 0.7
     """Minimum detector score for a hand box to be used."""
     rescale_factor: float = 2.0
     """Padding applied to the hand box before cropping (HaMeR's demo default)."""
@@ -135,23 +135,52 @@ def _chumpy_to_numpy(value: Any, key: str) -> Any:
     if not isinstance(value, _ChumpyStub):
         return value
     state = value.__dict__
-    if "x" in state:  # terminal chumpy.Ch stores its value in .x
+    if "x" in state:  # chumpy.ch.Ch (terminal node): its value is .x
         return np.asarray(state["x"])
-    arrays = [v for v in state.values() if isinstance(v, np.ndarray)]
-    if len(arrays) == 1:
-        return arrays[0]
-    raise ValueError(f"MANO entry {key!r} is a chumpy expression that cannot be converted without chumpy.")
+    if "a" in state and "idxs" in state:  # chumpy.reordering.Select: a.ravel()[idxs], reshaped
+        selected = np.asarray(_chumpy_to_numpy(state["a"], key)).ravel()[np.asarray(state["idxs"])]
+        shape = state.get("preferred_shape")
+        return selected.reshape(shape) if shape is not None else selected
+    raise ValueError(
+        f"MANO entry {key!r} is a chumpy expression ({sorted(state)}) that cannot be converted without chumpy."
+    )
+
+
+def _load_mano_pickle(path: Path) -> tuple[dict[str, Any], bool]:
+    """Load a MANO ``.pkl`` without chumpy; returns ``(data, contained_chumpy)``."""
+    with open(path, "rb") as f:
+        unpickler = _ChumpyFreeUnpickler(f, encoding="latin1")
+        data = unpickler.load()
+    return data, unpickler.found_chumpy
+
+
+def _mano_is_valid(data: dict[str, Any]) -> bool:
+    shapedirs, v_template = data.get("shapedirs"), data.get("v_template")
+    return (
+        isinstance(shapedirs, np.ndarray)
+        and isinstance(v_template, np.ndarray)
+        and shapedirs.ndim == 3
+        and shapedirs.shape[:2] == v_template.shape
+    )
 
 
 def ensure_mano_numpy(mano_path: Path) -> None:
-    """Rewrite a MANO ``.pkl`` with plain numpy arrays if it contains chumpy objects (keeps a backup)."""
-    with open(mano_path, "rb") as f:
-        unpickler = _ChumpyFreeUnpickler(f, encoding="latin1")
-        data = unpickler.load()
-    if not unpickler.found_chumpy:
-        return
-    clean = {key: _chumpy_to_numpy(value, key) for key, value in data.items()}
+    """Rewrite a MANO ``.pkl`` with plain numpy arrays if it contains chumpy objects (keeps a backup).
+
+    If a backup already exists but the current file is not a valid MANO model (e.g. written by an
+    older, broken version of this converter), the file is rebuilt from the backup.
+    """
     backup = mano_path.with_name(f"{mano_path.stem}_chumpy{mano_path.suffix}")
+    data, has_chumpy = _load_mano_pickle(mano_path)
+    if not has_chumpy and _mano_is_valid(data):
+        return
+    if not has_chumpy:
+        if not backup.exists():
+            raise ValueError(f"{mano_path} is not a valid MANO model and there is no {backup.name} to rebuild it from.")
+        data, _ = _load_mano_pickle(backup)
+    clean = {key: _chumpy_to_numpy(value, key) for key, value in data.items()}
+    if not _mano_is_valid(clean):
+        raise ValueError(f"Converting {mano_path} without chumpy produced an invalid MANO model.")
     if not backup.exists():
         mano_path.rename(backup)
     with open(mano_path, "wb") as f:

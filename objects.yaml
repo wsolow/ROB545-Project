@@ -1,4 +1,4 @@
-# Objects tracked by scripts/perception/track_object_pose.py.
+# Objects tracked by scripts/perception/track_human_demo.py (segmentation / pose stages).
 #
 # Each entry:
 #   name:        identifier used in the output files

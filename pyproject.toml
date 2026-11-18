@@ -88,11 +88,23 @@ perception = [
     "pybind11>=2.12",
     # FoundationPose weights (Google Drive)
     "gdown",
+    # HaMeR runtime (hamer and pyrender are installed with --no-deps; see README)
+    "pytorch-lightning",
+    "smplx==0.1.28",
+    "yacs",
+    "einops",
+    "webdataset",
+    "freetype-py",
+    "pyglet<2",
+    "networkx",
+    # YOLOv8 hand detector
+    "ultralytics",
 ]
 
 [project.scripts]
 sam3_server = "kinova_lfd.data_collection.human_demo.perception.segmentation.sam3:main"
 foundationpose_server = "kinova_lfd.data_collection.human_demo.perception.pose.foundationpose:main"
+hamer_server = "kinova_lfd.data_collection.human_demo.perception.hand.hamer:main"
 
 
 #[project.entry-points."gymnasium.envs"]
