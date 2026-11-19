@@ -11,3 +11,7 @@ objects:
   - name: pink_cube
     prompt: pink cube
     box_size_m: [0.041, 0.041, 0.041]
+  - name: blue_cube
+    prompt: blue cube
+    box_size_m: [0.041, 0.041, 0.041]
+

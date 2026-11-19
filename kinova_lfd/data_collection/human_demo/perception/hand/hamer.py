@@ -207,7 +207,15 @@ class VitPoseHandDetector(HandDetector):
     ) -> None:
         import torch
         from detectron2.config import LazyConfig
+
+        # ViTPose's mmpose sets PYOPENGL_PLATFORM=osmesa unconditionally and imports pyrender, which
+        # fails without OSMesa. Import pyrender under EGL first so mmpose's import is a no-op.
+        os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+        platform = os.environ["PYOPENGL_PLATFORM"]
+        import pyrender  # noqa: F401
         from mmpose.apis import init_pose_model
+
+        os.environ["PYOPENGL_PLATFORM"] = platform
 
         import hamer
         from hamer.utils.utils_detectron2 import DefaultPredictor_Lazy

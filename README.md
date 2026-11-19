@@ -104,9 +104,18 @@ cd -
    Download `MANO_RIGHT.pkl` from [mano.is.tue.mpg.de](https://mano.is.tue.mpg.de) (registration
    required) into `kinova_lfd/.cache/models/hamer/data/mano/`. The server rewrites it without
    chumpy on first start (the original is kept as `MANO_RIGHT_chumpy.pkl`). HaMeR's original hand
-   detector (`hamer_server --detector vitpose`, ViTDet + ViTPose) also needs detectron2 and
-   `pip install -e third_party/hamer/third-party/ViTPose` (`mmcv==1.3.9`, untested on this env).
-   The default `--detector yolov8` needs neither.
+   detector (`hamer_server --detector vitpose`, ViTDet + ViTPose) needs extra packages; the default
+   `--detector yolov8` needs none of them. ViTPose's mmpose needs `mmcv>=1.3.8,<=1.5.0` but not its
+   CUDA ops, so mmcv is built without them. detectron2 downgrades `iopath`, which sam3 needs back at
+   0.1.10. The ViTDet-H weights (2.6 GB) download on the first start:
+```bash
+pip install cython json_tricks munkres
+pip install --no-build-isolation xtcocotools
+MMCV_WITH_OPS=0 pip install --no-build-isolation mmcv==1.5.0
+pip install --no-deps -e third_party/hamer/third-party/ViTPose
+pip install --no-build-isolation "git+https://github.com/facebookresearch/detectron2.git"
+pip install --no-deps iopath==0.1.10
+```
 
 5. FoundationPose weights (refiner `2023-10-28-18-33-37`, scorer `2024-01-11-20-02-45`). The server
    links `third_party/FoundationPose/weights` to this folder on startup:
