@@ -2,49 +2,25 @@
 
 Script for visualizing a trained policy with Mujoco
 
+Usage:
+    python scripts/rl/mj_play.py Mj-Gen3-LiftCube-v0 --agent.experiment-name mj_gen3
+    python scripts/rl/mj_play.py Mj-Gen3-LiftCube-v0 --checkpoint-file _logs/rsl_rl/mj_gen3/<run>/model_100.pt
+
 Written by Will Solow and Jeff Jewett, 2026
 """
 
-import argparse
 import os
-import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
-from mjlab.rl import MjlabOnPolicyRunner, RslRlOnPolicyRunnerCfg
+from mjlab.rl import MjlabOnPolicyRunner
 from mjlab.utils.os import get_checkpoint_path
 
-from kinova_lfd.envs.base.mujoco.configclass import class_to_dict
 from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 from kinova_lfd.envs.factory import create_env
-from kinova_lfd.rl.config import add_rsl_rl_args, update_rsl_rl_cfg
-from kinova_lfd.rl.hydra import hydra_task_config
+from kinova_lfd.rl.cli import EnvCfgT, RunConfig, parse_cli
 from kinova_lfd.rl.vecenv import RslRlVecEnvWrapper
-
-parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--num_envs", type=int, default=None, required=True, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, required=True, help="Name of the task.")
-parser.add_argument(
-    "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
-)
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-
-parser.add_argument("--device", type=str, default="cuda", choices={"cuda", "cpu"}, help="Device to run on: cuda/cpu")
-parser.add_argument("--viewer", type=str, default="auto", help="Mujoco viewer backend to use/")
-parser.add_argument(
-    "--enable_cameras",
-    action=argparse.BooleanOptionalAction,
-    default=True,
-    help="If to enable cameras in the environment.",
-)
-add_rsl_rl_args(parser)
-
-args_cli, hydra_args = parser.parse_known_args()
-if args_cli.video:
-    args_cli.enable_cameras = True
-sys.argv = [sys.argv[0]] + hydra_args
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -52,53 +28,52 @@ torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
 
 
-@hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg, agent_cfg: RslRlOnPolicyRunnerCfg):
-    """Play with RSL-RL agent."""
-    # Override configurations with non-hydra CLI arguments
-    agent_cfg = update_rsl_rl_cfg(agent_cfg, args_cli)
+@dataclass
+class PlayConfig(RunConfig[EnvCfgT]):
+    """Visualize a trained RSL-RL policy."""
 
-    # Apply environment overrides to the local config before direct construction.
-    if args_cli.num_envs is not None:
-        env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.sim.device = args_cli.device
-    # Set the environment seed
+    checkpoint_file: str | None = None
+    """Explicit checkpoint file. If unset, ``agent.load_run`` / ``agent.load_checkpoint`` select one."""
+    viewer: str = "auto"
+    """Mujoco viewer backend (``auto`` picks ``native`` when a display is available)."""
+
+
+def main() -> None:
+    """Play with RSL-RL agent."""
+    task, cfg = parse_cli(
+        PlayConfig,
+        description="Visualize a trained RSL-RL policy.",
+        env_overrides={"enable_cameras": True},
+    )
+    env_cfg, agent_cfg = cfg.env, cfg.agent
     env_cfg.seed = agent_cfg.seed
-    # env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    env_cfg.enable_cameras = args_cli.enable_cameras
 
     # Specify directory for logging experiments
-    log_root_path = (Path("_logs") / "rsl_rl" / agent_cfg.experiment_name).resolve()
+    log_root_path = (Path(cfg.log_root) / agent_cfg.experiment_name).resolve()
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
-    if args_cli.checkpoint and Path(args_cli.checkpoint).is_file():
-        resume_path = Path(args_cli.checkpoint).resolve()
+    if cfg.checkpoint_file:
+        resume_path = Path(cfg.checkpoint_file).resolve()
     else:
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
-
-    # Set the log directory for the environment
     env_cfg.log_dir = str(resume_path.parent)
 
-    env = create_env(args_cli.task, env_cfg)
-
-    # Wrap around environment for RSL-RL
-    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+    env = RslRlVecEnvWrapper(create_env(task, env_cfg), clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     if agent_cfg.class_name != "OnPolicyRunner":
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-    runner = MjlabOnPolicyRunner(env, class_to_dict(agent_cfg), log_dir=None, device=args_cli.device)
-    runner.load(str(resume_path), map_location=args_cli.device)
+    runner = MjlabOnPolicyRunner(env, asdict(agent_cfg), log_dir=None, device=env_cfg.device)
+    runner.load(str(resume_path), map_location=env_cfg.device)
 
     policy = runner.get_inference_policy(device=env.unwrapped.device)
-
     runner.export_policy_to_jit(str(resume_path.parent / "exported"), filename="agent.pt")
+
     # Launch Mujoco viewer
-    if args_cli.viewer == "auto":
+    if cfg.viewer == "auto":
         has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
         resolved_viewer = "native" if has_display else "viser"
-        del has_display
     else:
-        resolved_viewer = args_cli.viewer
+        resolved_viewer = cfg.viewer
 
     if resolved_viewer == "native":
         MjViewer(env, policy).run()

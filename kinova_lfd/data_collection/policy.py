@@ -4,6 +4,7 @@ The RSL-RL stack is imported lazily in :meth:`RslRlPolicySource.connect`, so the
 helpers can be imported cheaply (e.g. by diffusion playback).
 """
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,8 +15,9 @@ from kinova_lfd.envs.le_robot.base import JOINT_ACTION_KEYS
 from .configs import RslRlPolicyConfig
 
 if TYPE_CHECKING:
-    from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
-    from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
+    from mjlab.rl import MjlabOnPolicyRunner
+
+    from kinova_lfd.rl.vecenv import RslRlVecEnvWrapper
 
 
 def cube_goal_success(cube_pose: torch.Tensor, goal_pose: torch.Tensor, delta: float) -> bool:
@@ -42,7 +44,7 @@ class RslRlPolicySource:
     def __init__(self, config: RslRlPolicyConfig, robot: Any):
         self.config = config
         self.robot = robot
-        self.runner: OnPolicyRunner | None = None
+        self.runner: MjlabOnPolicyRunner | None = None
         self.policy_env: RslRlVecEnvWrapper | None = None
         self.policy: Any = None
         self._is_connected = False
@@ -60,28 +62,19 @@ class RslRlPolicySource:
         if self.robot.task_name != self.config.task:
             raise ValueError(f"Policy task {self.config.task!r} does not match robot task {self.robot.task_name!r}.")
 
-        from kinova_lfd.rl.cfg.default_rsl_rl import make_default_rsl_rl_cfg
-        from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
-        from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
-        from kinova_lfd.rl.util.hydra import _load_agent_cfg
+        from mjlab.rl import MjlabOnPolicyRunner
+
+        from kinova_lfd.rl.config import load_agent_cfg
+        from kinova_lfd.rl.vecenv import RslRlVecEnvWrapper
 
         self.policy_env = RslRlVecEnvWrapper(self.robot.env, clip_actions=self.config.clip_actions)
-        agent_cfg = _load_agent_cfg(self.config.agent)
-        if agent_cfg is None:
-            agent_cfg = make_default_rsl_rl_cfg()
-        if isinstance(agent_cfg, dict):
-            agent_cfg["device"] = self.config.device
-            agent_cfg_dict = agent_cfg
-        else:
-            agent_cfg.device = self.config.device
-            agent_cfg_dict = agent_cfg.to_dict()
-        self.runner = OnPolicyRunner(
+        self.runner = MjlabOnPolicyRunner(
             self.policy_env,
-            agent_cfg_dict,
+            asdict(load_agent_cfg(self.config.agent)),
             log_dir=None,
             device=self.config.device,
         )
-        self.runner.load(str(Path(self.config.checkpoint).expanduser().resolve()))
+        self.runner.load(str(Path(self.config.checkpoint).expanduser().resolve()), map_location=self.config.device)
         self.policy = self.runner.get_inference_policy(device=self.policy_env.unwrapped.device)
         self._is_connected = True
         self.reset()
@@ -95,8 +88,8 @@ class RslRlPolicySource:
 
     def reset(self) -> None:
         """Reset recurrent inference state when the policy provides it."""
-        if self.runner is not None and hasattr(self.runner.alg.policy, "reset"):
-            self.runner.alg.policy.reset()
+        if self.policy is not None and hasattr(self.policy, "reset"):
+            self.policy.reset()
 
     def get_action(self) -> dict[str, float]:
         """Infer one joint-position action from the current native task observation."""

@@ -1,16 +1,40 @@
 """LeRobot Robot wrapping KinovaLfD ``Kortex-TCP-Gen3-v0``."""
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 from lerobot.lerobot_types import RobotAction
+from lerobot.robots.config import RobotConfig
 from lerobot.utils.decorators import check_if_not_connected
 
 from kinova_lfd.core.np_math import base_to_tcp_twist
 from kinova_lfd.core.specs import ActionSpec
 
 from .base import TWIST_TCP_KEYS, Gen3LfDRobot, action_dict_to_array
-from .config_kortex_tcp_gen3 import KortexTcpGen3RobotConfig
+
+
+@RobotConfig.register_subclass("kortex_tcp_gen3")
+@dataclass(kw_only=True)
+class KortexTcpGen3RobotConfig(RobotConfig):
+    """Config for wrapping ``Kortex-TCP-Gen3-v0`` as a LeRobot ``Robot``."""
+
+    robot_ip: str = "192.168.1.10"
+    dt: float = 1.0 / 20.0
+
+    # Observation modalities
+    use_wrist_camera: bool = True
+    use_tabletop_camera: bool = False
+    include_joint_positions: bool = True
+    include_ee_pose: bool = True
+    camera_height: int = 480
+    camera_width: int = 640
+    # Wrist RTSP stream is 1280x720; recorded at half resolution.
+    wrist_camera_height: int = 360
+    wrist_camera_width: int = 640
+
+    # Action mode forwarded to Kinova ``ActionSpec``
+    action_spec: str = "TWIST_TCP"
 
 
 class KortexTcpGen3Robot(Gen3LfDRobot):

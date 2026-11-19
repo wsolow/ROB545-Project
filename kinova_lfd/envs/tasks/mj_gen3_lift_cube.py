@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass, field
 
 import mujoco
 import torch
@@ -7,71 +8,76 @@ from mjlab.scene import Scene
 from mjlab.sim import MujocoCfg
 from mjlab.sim.sim import Simulation, SimulationCfg
 
-from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.mj_tensor_math import (
     quat_from_euler_xyz,
     subtract_frame_transforms,
     tf_combine,
 )
+from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
-from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.tasks.lift_cube_curriculum import LiftCubeCurriculumCfg, LiftCubeCurriculumManager
 
 from .mj_gen3 import MjGen3Env, MjGen3EnvCfg, validate_scene_entities
 
 
-@configclass
+@dataclass(kw_only=True)
 class MjGen3LiftCubeEnvCfg(MjGen3EnvCfg):
-    enable_cameras = False
+    enable_cameras: bool = False
 
-    episode_length_s = 3.0
-    decimation = 2
+    episode_length_s: float = 3.0
+    decimation: int = 2
 
-    observation_space = 30
+    observation_space: int = 30
 
     # reward scales
-    min_height = 0.06
-    cube_reach_reward_scale = 1.0
-    cube_reach_reward_std = 0.1
-    cube_lift_reward_scale = 15.0
-    cube_goal_reward_scale = 16.0
-    cube_goal_reward_std = 0.3
-    cube_goal_fine_grained_scale = 5.0
-    cube_goal_fine_grained_std = 0.05
-    action_rate_reward_scale = -0.0001
-    joint_vel_reward_scale = -0.0001
-    cube_goal_distance_threshold = 0.03
-    curriculum = LiftCubeCurriculumCfg()
+    min_height: float = 0.06
+    cube_reach_reward_scale: float = 1.0
+    cube_reach_reward_std: float = 0.1
+    cube_lift_reward_scale: float = 15.0
+    cube_goal_reward_scale: float = 16.0
+    cube_goal_reward_std: float = 0.3
+    cube_goal_fine_grained_scale: float = 5.0
+    cube_goal_fine_grained_std: float = 0.05
+    action_rate_reward_scale: float = -0.0001
+    joint_vel_reward_scale: float = -0.0001
+    cube_goal_distance_threshold: float = 0.03
+    curriculum: LiftCubeCurriculumCfg = field(default_factory=LiftCubeCurriculumCfg)
 
     # Keep the arm in a deterministic, camera-facing ready pose.  The final
     # entry is the gripper command and is repeated in ``joint_ids``.
-    robot_init_joint_pos = [0.0, 0.25, -0.05, 1.60, 0.0, 1.20, -1.60, 0.0]
+    robot_init_joint_pos: list[float] = field(default_factory=lambda: [0.0, 0.25, -0.05, 1.60, 0.0, 1.20, -1.60, 0.0])
 
-    # Cube pose initial ranges
+    # Cube pose initial ranges ([low, high] each).
     # Keep the cube centered in the wrist-camera workspace.  The z coordinate
     # is the cube center, so it must be half the cube size above the floor.
-    init_pos_x = [0.45, 0.45]
-    init_pos_y = [0.0, 0.0]
-    init_pos_z = [0.025, 0.025]
-    init_roll = [0.0, 0.0]
-    init_pitch = [0.0, 0.0]
-    init_yaw = [-3.141592653589793, 3.141592653589793]
-    cube_init_ranges = [init_pos_x, init_pos_y, init_pos_z, init_roll, init_pitch, init_yaw]
+    init_pos_x: list[float] = field(default_factory=lambda: [0.45, 0.45])
+    init_pos_y: list[float] = field(default_factory=lambda: [0.0, 0.0])
+    init_pos_z: list[float] = field(default_factory=lambda: [0.025, 0.025])
+    init_roll: list[float] = field(default_factory=lambda: [0.0, 0.0])
+    init_pitch: list[float] = field(default_factory=lambda: [0.0, 0.0])
+    init_yaw: list[float] = field(default_factory=lambda: [-3.141592653589793, 3.141592653589793])
 
     # The goal is vertically above the initial cube position.
-    goal_height = 0.35
+    goal_height: float = 0.35
 
-    sim = SimulationCfg(
-        nconmax=55,
-        njmax=600,
-        mujoco=MujocoCfg(
-            timestep=0.01,
-            iterations=10,
-            ls_iterations=20,
-            impratio=10,
-            cone="elliptic",
-        ),
+    sim: SimulationCfg = field(
+        default_factory=lambda: SimulationCfg(
+            nconmax=55,
+            njmax=600,
+            mujoco=MujocoCfg(
+                timestep=0.01,
+                iterations=10,
+                ls_iterations=20,
+                impratio=10,
+                cone="elliptic",
+            ),
+        )
     )
+
+    @property
+    def cube_init_ranges(self) -> list[list[float]]:
+        """Per-axis ``[low, high]`` cube init ranges: x, y, z, roll, pitch, yaw."""
+        return [self.init_pos_x, self.init_pos_y, self.init_pos_z, self.init_roll, self.init_pitch, self.init_yaw]
 
 
 class MjGen3LiftCubeEnv(MjGen3Env):

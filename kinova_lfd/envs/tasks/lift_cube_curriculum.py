@@ -1,11 +1,10 @@
 """Curriculum scheduling for the MuJoCo lift-cube task."""
 
+from dataclasses import dataclass
 from typing import Any
 
-from kinova_lfd.envs.base.mujoco.configclass import configclass
 
-
-@configclass
+@dataclass
 class LiftCubeCurriculumCfg:
     """Configuration for the lift-cube reward curriculum."""
 

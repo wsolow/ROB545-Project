@@ -1,6 +1,6 @@
 import math
 from abc import abstractmethod
-from dataclasses import MISSING, field
+from dataclasses import dataclass, field
 from typing import Any
 
 import gymnasium as gym
@@ -21,14 +21,13 @@ from mjlab.viewer.offscreen_renderer import OffscreenRenderer
 from mjlab.viewer.viewer_config import ViewerConfig
 from prettytable import PrettyTable
 
-from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.mj_tensor_math import convert_quat, quat_apply, quat_apply_inverse, quat_inv, quat_mul
+from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
-from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 
 
-@configclass
+@dataclass(kw_only=True)
 class MjDirectRlEnvCfg:
     """Configuration for a manager-based RL environment.
 
@@ -42,26 +41,38 @@ class MjDirectRlEnvCfg:
 
     # Base environment configuration.
 
-    decimation: int = MISSING
+    decimation: int
     """Number of physics simulation steps per environment step. Higher values mean
   coarser control frequency. Environment step duration = physics_dt * decimation."""
 
-    scene: SceneCfg = MISSING
+    scene: SceneCfg
     """Scene configuration defining terrain, entities, and sensors. The scene
   specifies ``num_envs``, the number of parallel environments."""
 
     enable_cameras: bool = True
     """Whether to execute the scene sensor pipeline during reset and stepping."""
 
+    observation_space: int
+    """Dimension of the ``policy`` observation group."""
+
+    action_space: int
+    """Dimension of the action vector."""
+
+    device: str = "cuda"
+    """Torch device for simulation and environment buffers."""
+
+    log_dir: str | None = None
+    """Run directory for this experiment; set by the training/play scripts."""
+
     # RL-specific configuration.
 
-    episode_length_s: float = MISSING
+    episode_length_s: float
     """Duration of an episode (in seconds).
 
   Episode length in steps is computed as:
     ceil(episode_length_s / (sim.mujoco.timestep * decimation))
   """
-    is_finite_horizon: bool = MISSING
+    is_finite_horizon: bool
     """Whether the task has a finite or infinite horizon. Defaults to False (infinite).
 
   - **Finite horizon (True)**: The time limit defines the task boundary. When reached,
@@ -71,7 +82,7 @@ class MjDirectRlEnvCfg:
     limit.
   """
 
-    scale_rewards_by_dt: bool = MISSING
+    scale_rewards_by_dt: bool = True
     """Whether to multiply rewards by the environment step duration (dt).
 
     When True (default), reward values are scaled by step_dt to normalize cumulative

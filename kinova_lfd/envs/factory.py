@@ -1,21 +1,20 @@
 """Construct a manipulation environment from a task name."""
 
+import dataclasses
 from typing import Any
 
 from kinova_lfd.envs.base.gym import GymEnv
 
+MJ_TASKS = ("Mj-Gen3-v0", "Mj-Gen3-LiftCube-v0")
+"""Names of the MuJoCo tasks that ``get_env_cfg`` can build a dataclass config for."""
+
 
 def _apply_cfg(cfg: object, overrides: dict[str, Any] | object | None) -> object:
-    """Apply configuration overrides to a configclass instance."""
+    """Apply top-level field overrides (dict) to a config dataclass, or return a full config as-is."""
     if overrides is None:
         return cfg
     if isinstance(overrides, dict):
-        if hasattr(cfg, "from_dict"):
-            cfg.from_dict(overrides)
-        else:
-            for key, value in overrides.items():
-                setattr(cfg, key, value)
-        return cfg
+        return dataclasses.replace(cfg, **overrides)
     return overrides
 
 

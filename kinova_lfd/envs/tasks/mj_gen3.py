@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass, field
 
 import mujoco
 import numpy as np
@@ -10,10 +11,9 @@ from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.sim.sim import Simulation
 from mjlab.terrains import TerrainEntityCfg
 
-from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.core.mj_tensor_math import convert_quat, quat_from_matrix
+from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.mujoco.assets.kinova_gen3.gen3_constants import get_gen3_robot_cfg
-from kinova_lfd.envs.base.mujoco.configclass import configclass
 from kinova_lfd.envs.base.mujoco.controllers.differential_ik import MjDifferentialIk
 from kinova_lfd.envs.base.mujoco.controllers.waypoints import WaypointCfg
 from kinova_lfd.envs.base.mujoco.mj_env import MjDirectRlEnv, MjDirectRlEnvCfg
@@ -31,27 +31,8 @@ def validate_scene_entities(scene_cfg: SceneCfg, task_name: str) -> None:
         )
 
 
-@configclass
-class MjGen3EnvCfg(MjDirectRlEnvCfg):
-    decimation = 2
-
-    episode_length_s = 100.0
-    action_space = 8
-    observation_space = 8
-    tool_site_name = "pinch_site"
-    ee_link_name = "end_effector_link"
-    base_link_name = "base_link"
-    gripper_joint_names = ["right_driver_joint"]
-    joint_ids = [0, 1, 2, 3, 4, 5, 6, 0]
-    tcp_offset = [0.0, 0.0, 0.120, 0.0, 0.0, 0.0, 1.0]
-    """TCP offset from ``ee_link_name``: ``[x, y, z, qx, qy, qz, qw]`` (xyzw, like ``KortexEnv``)."""
-    interpolate_joint_targets = False
-    """Linearly interpolate arm joint targets from the previous env.step's targets to the new ones
-    across the ``decimation`` physics substeps, instead of holding the new targets constant."""
-
-    sim = SimulationCfg(njmax=300, nconmax=50, mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81)))
-
-    scene = SceneCfg(
+def _default_gen3_scene() -> SceneCfg:
+    return SceneCfg(
         num_envs=1,
         env_spacing=2,
         terrain=TerrainEntityCfg(
@@ -65,8 +46,8 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
                 name="tabletop_camera",
                 width=640,
                 height=480,
-                pos=[0.4, -0.5, 0.3],
-                quat=[0.8192, 0.5736, 0.0, 0.0],
+                pos=(0.4, -0.5, 0.3),
+                quat=(0.8192, 0.5736, 0.0, 0.0),
                 fovy=90,
                 data_types=("rgb", "depth"),
                 use_shadows=True,
@@ -85,6 +66,36 @@ class MjGen3EnvCfg(MjDirectRlEnvCfg):
             ),
         ),
     )
+
+
+@dataclass(kw_only=True)
+class MjGen3EnvCfg(MjDirectRlEnvCfg):
+    decimation: int = 2
+
+    episode_length_s: float = 100.0
+    is_finite_horizon: bool = True
+    """Kept ``True`` to match the previous configclass behaviour, where this field was never set and the
+    (truthy) ``MISSING`` sentinel made the RSL-RL wrapper treat episodes as finite-horizon."""
+    action_space: int = 8
+    observation_space: int = 8
+    tool_site_name: str = "pinch_site"
+    ee_link_name: str = "end_effector_link"
+    base_link_name: str = "base_link"
+    gripper_joint_names: list[str] = field(default_factory=lambda: ["right_driver_joint"])
+    joint_ids: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 0])
+    tcp_offset: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.120, 0.0, 0.0, 0.0, 1.0])
+    """TCP offset from ``ee_link_name``: ``[x, y, z, qx, qy, qz, qw]`` (xyzw, like ``KortexEnv``)."""
+    interpolate_joint_targets: bool = False
+    """Linearly interpolate arm joint targets from the previous env.step's targets to the new ones
+    across the ``decimation`` physics substeps, instead of holding the new targets constant."""
+
+    sim: SimulationCfg = field(
+        default_factory=lambda: SimulationCfg(
+            njmax=300, nconmax=50, mujoco=MujocoCfg(integrator="implicitfast", gravity=(0, 0, -9.81))
+        )
+    )
+
+    scene: SceneCfg = field(default_factory=_default_gen3_scene)
 
 
 class MjGen3Env(MjDirectRlEnv):
@@ -303,7 +314,6 @@ class MjGen3Env(MjDirectRlEnv):
         camera_data = camera.data
         return {
             "rgb": camera_data.rgb.permute(0, 3, 1, 2),
-            # (camera_data.depth.permute(0, 3, 1, 2) * 1000).to(torch.uint16)[:, 0] # TODO changing this here has downstream effects?
             "depth": camera_data.depth.permute(0, 3, 1, 2)[:, 0],
             "timestamp": time.perf_counter(),
             "camera_pose": camera_pose,
@@ -322,46 +332,12 @@ class MjGen3Env(MjDirectRlEnv):
           - ``timestamp``: float timestamp in seconds
 
         """
-        latest = self._rgbd_from_sensor(
+        return self._rgbd_from_sensor(
             self._tabletop_camera,
             self._pose_wxyz_to_xyzw(
                 torch.as_tensor(self._tabletop_camera.cfg.pos + self._tabletop_camera.cfg.quat, device=self.device)
             ),
         )
-        # camera_data = self._tabletop_camera.data
-
-        # def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
-        #     """Colorize a depth image and return a PIL Image.
-
-        #     Args:
-        #         depth:     HxW float array (meters or raw units)
-        #         min_depth: clip minimum (defaults to array min) in meters
-        #         max_depth: clip maximum (defaults to array max) in meters
-        #         colormap:  any matplotlib colormap name
-
-        #     """
-        #     import matplotlib.pyplot as plt
-
-        #     if depth.dtype == np.uint16:
-        #         depth = depth.astype(np.float32) / 1000
-
-        #     min_d = min_depth if min_depth is not None else np.nanmin(depth)
-        #     max_d = max_depth if max_depth is not None else np.nanmax(depth)
-
-        #     # Normalize to [0, 1]
-        #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
-        #     normalized = np.clip(normalized, 0, 1)
-
-        #     # Apply colormap -> RGBA float array -> uint8
-        #     cmap = plt.get_cmap(colormap)
-        #     colored = (cmap(normalized) * 255).astype(np.uint8)
-
-        #     return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
-
-        # Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
-        # colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
-
-        return latest
 
     def _get_latest_rgbd_wrist(self):
         """Grab the latest RGBD image from the wrist camera on the Gen3.
@@ -373,40 +349,7 @@ class MjGen3Env(MjDirectRlEnv):
         pos = torch.as_tensor(self.sim.data.cam_xpos[:, cam_idx], device=self.device, dtype=torch.float32)
         xmat = torch.as_tensor(self.sim.data.cam_xmat[:, cam_idx], device=self.device, dtype=torch.float32)
         pose = self._pose_wxyz_to_xyzw(torch.cat((pos, quat_from_matrix(xmat)), dim=-1).squeeze(0))
-        camera_data = self._wrist_camera.data
-        latest = self._rgbd_from_sensor(self._wrist_camera, pose)
-
-        # def colorize_depth(depth: np.ndarray, min_depth=None, max_depth=None, colormap="plasma") -> Image.Image:
-        #     """Colorize a depth image and return a PIL Image.
-
-        #     Args:
-        #         depth:     HxW float array (meters or raw units)
-        #         min_depth: clip minimum (defaults to array min) in meters
-        #         max_depth: clip maximum (defaults to array max) in meters
-        #         colormap:  any matplotlib colormap name
-
-        #     """
-        #     import matplotlib.pyplot as plt
-
-        #     if depth.dtype == np.uint16:
-        #         depth = depth.astype(np.float32) / 1000
-
-        #     min_d = min_depth if min_depth is not None else np.nanmin(depth)
-        #     max_d = max_depth if max_depth is not None else np.nanmax(depth)
-
-        #     # Normalize to [0, 1]
-        #     normalized = (depth - min_d) / (max_d - min_d + 1e-8)
-        #     normalized = np.clip(normalized, 0, 1)
-
-        #     # Apply colormap -> RGBA float array -> uint8
-        #     cmap = plt.get_cmap(colormap)
-        #     colored = (cmap(normalized) * 255).astype(np.uint8)
-
-        #     return Image.fromarray(colored.squeeze(), mode="RGBA").convert("RGB")
-
-        # Image.fromarray(camera_data.rgb[0].cpu().numpy()).save("out.png")
-        # colorize_depth(latest["depth"].cpu().numpy(), max_depth=1).save("depth.png")
-        return latest
+        return self._rgbd_from_sensor(self._wrist_camera, pose)
 
     @property
     def _robot_tool_pose_b(self) -> torch.Tensor:

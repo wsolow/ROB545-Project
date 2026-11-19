@@ -44,7 +44,7 @@ mujoco = [
     "mjlab",
     "rsl-rl-lib==5.4.2",
     "tensorboard",
-    "hydra-core"
+    "tyro"
 ]
 
 imitation = [
