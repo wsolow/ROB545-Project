@@ -4,7 +4,6 @@ kinova_lfd/envs/base/kortex/kortex_udp/cpp/build/
 kinova_lfd/envs/base/kortex/kortex_cpp_api/
 
 **build/
-**pinocchio/
 *.npz
 # LeRobot Gen3 demonstration datasets
 _data/
@@ -13,6 +12,4 @@ _outputs/
 _logs/
 outputs/
 *.txt
-# Third-party model source (see README) and local model/mesh caches
-third_party/
-**/.cache/
+
