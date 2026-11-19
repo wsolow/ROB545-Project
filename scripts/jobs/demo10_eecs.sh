@@ -5,6 +5,5 @@
 #SBATCH -p gpu,eecs
 #SBATCH -t 1-00:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --mem=12G 
 
 python3 scripts/imitation/train_diffusion.py --dataset gen3_demo_adm --batch-size 32
