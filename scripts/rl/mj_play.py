@@ -8,18 +8,18 @@ Written by Will Solow and Jeff Jewett, 2026
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import torch
+from mjlab.rl import MjlabOnPolicyRunner, RslRlOnPolicyRunnerCfg
+from mjlab.utils.os import get_checkpoint_path
 
+from kinova_lfd.envs.base.mujoco.configclass import class_to_dict
 from kinova_lfd.envs.base.viewers.mujoco_viewer import MjViewer
 from kinova_lfd.envs.factory import create_env
-from kinova_lfd.rl.cfg import cli_args
-from kinova_lfd.rl.cfg.rsl_rl_cfg import RslRlBaseRunnerCfg
-from kinova_lfd.rl.rsl_rl.runners import OnPolicyRunner
-from kinova_lfd.rl.rsl_wrapper import RslRlVecEnvWrapper
-from kinova_lfd.rl.util.export import export_policy_as_jit
-from kinova_lfd.rl.util.hydra import hydra_task_config
-from kinova_lfd.rl.util.parse_cfg import get_checkpoint_path
+from kinova_lfd.rl.config import add_rsl_rl_args, update_rsl_rl_cfg
+from kinova_lfd.rl.hydra import hydra_task_config
+from kinova_lfd.rl.vecenv import RslRlVecEnvWrapper
 
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
@@ -39,7 +39,7 @@ parser.add_argument(
     default=True,
     help="If to enable cameras in the environment.",
 )
-cli_args.add_rsl_rl_args(parser)
+add_rsl_rl_args(parser)
 
 args_cli, hydra_args = parser.parse_known_args()
 if args_cli.video:
@@ -53,12 +53,10 @@ torch.backends.cudnn.benchmark = False
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg, agent_cfg: RslRlBaseRunnerCfg):
+def main(env_cfg, agent_cfg: RslRlOnPolicyRunnerCfg):
     """Play with RSL-RL agent."""
     # Override configurations with non-hydra CLI arguments
-    agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
-
-    agent_cfg.device = args_cli.device
+    agent_cfg = update_rsl_rl_cfg(agent_cfg, args_cli)
 
     # Apply environment overrides to the local config before direct construction.
     if args_cli.num_envs is not None:
@@ -70,18 +68,15 @@ def main(env_cfg, agent_cfg: RslRlBaseRunnerCfg):
     env_cfg.enable_cameras = args_cli.enable_cameras
 
     # Specify directory for logging experiments
-    log_root_path = os.path.join("_logs", "rsl_rl", agent_cfg.experiment_name)
-    log_root_path = os.path.abspath(log_root_path)
+    log_root_path = (Path("_logs") / "rsl_rl" / agent_cfg.experiment_name).resolve()
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
-    if args_cli.checkpoint:
-        resume_path = os.path.abspath(args_cli.checkpoint)
+    if args_cli.checkpoint and Path(args_cli.checkpoint).is_file():
+        resume_path = Path(args_cli.checkpoint).resolve()
     else:
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
-    log_dir = os.path.dirname(resume_path)
-
     # Set the log directory for the environment
-    env_cfg.log_dir = log_dir
+    env_cfg.log_dir = str(resume_path.parent)
 
     env = create_env(args_cli.task, env_cfg)
 
@@ -89,23 +84,14 @@ def main(env_cfg, agent_cfg: RslRlBaseRunnerCfg):
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    else:
+    if agent_cfg.class_name != "OnPolicyRunner":
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-    runner.load(resume_path)
+    runner = MjlabOnPolicyRunner(env, class_to_dict(agent_cfg), log_dir=None, device=args_cli.device)
+    runner.load(str(resume_path), map_location=args_cli.device)
 
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 
-    if hasattr(runner.alg.policy, "actor_obs_normalizer"):
-        normalizer = runner.alg.policy.actor_obs_normalizer
-    elif hasattr(runner.alg.policy, "student_obs_normalizer"):
-        normalizer = runner.alg.policy.student_obs_normalizer
-    else:
-        normalizer = None
-
-    export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(runner.alg.policy, normalizer=normalizer, path=export_model_dir, filename="agent.pt")
+    runner.export_policy_to_jit(str(resume_path.parent / "exported"), filename="agent.pt")
     # Launch Mujoco viewer
     if args_cli.viewer == "auto":
         has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
