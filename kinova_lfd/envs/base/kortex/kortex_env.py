@@ -9,7 +9,6 @@ import numpy as np
 from kinova_lfd.core.np_math import np_quat_from_euler_xyz
 from kinova_lfd.core.specs import ActionSpec
 from kinova_lfd.envs.base.gym import GymEnv
-from kinova_lfd.envs.base.seed import configure_seed
 
 
 class KortexEnvCfg:
@@ -177,19 +176,7 @@ class KortexEnv(GymEnv):
             self.extras,
         )
 
-    @staticmethod
-    def seed(seed: int = -1) -> int:
-        """Set the seed for the environment.
 
-        Args:
-            seed: The seed for random generator. Defaults to -1.
-
-        Returns:
-            The seed used for random generator.
-
-        """
-        # set seed for torch and other libraries
-        return configure_seed(seed)
 
     def render(self) -> None:
         """Run rendering by visualizing with RViz."""
