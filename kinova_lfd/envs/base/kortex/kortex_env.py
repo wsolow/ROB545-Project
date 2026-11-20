@@ -176,8 +176,6 @@ class KortexEnv(GymEnv):
             self.extras,
         )
 
-
-
     def render(self) -> None:
         """Run rendering by visualizing with RViz."""
 

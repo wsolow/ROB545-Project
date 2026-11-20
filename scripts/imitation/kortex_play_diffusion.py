@@ -56,7 +56,7 @@ def main() -> None:
         dt=bundle.dt,
         action_spec="TWIST_TCP",
         use_wrist_camera=use_wrist,
-        use_tabletop_camera=use_tabletop,
+        use_tabletop_camera=True,
         **camera_size_overrides(bundle.ds_features, "kortex"),
     )
     robot = make_robot(robot_cfg)
